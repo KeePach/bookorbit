@@ -1,0 +1,196 @@
+import type { BookMetadataFetchConfig } from '@bookorbit/types';
+
+import { BookMetadataFetchEligibilityService, type BookEligibilityData } from './book-metadata-fetch-eligibility.service';
+
+const baseBook = (): BookEligibilityData => ({
+  metadataScore: 80,
+  lastMetadataFetchAt: new Date('2026-01-01T00:00:00.000Z'),
+  title: 'Book',
+  subtitle: 'Subtitle',
+  description: 'Description',
+  publisher: 'Publisher',
+  publishedYear: 2020,
+  language: 'en',
+  pageCount: 320,
+  isbn10: null,
+  isbn13: null,
+  communityRating: [{ provider: 'hardcover', rating: 4.25 }],
+  seriesName: 'Series',
+  seriesIndex: '1',
+  coverSource: 'cover.jpg',
+  hasAudioCoverMedia: false,
+  hasAudioCover: false,
+  hasAuthors: true,
+  hasGenres: true,
+  hasTags: true,
+  hasNarrators: true,
+  durationSeconds: 10_000,
+  abridged: false,
+});
+
+const baseConfig = (): BookMetadataFetchConfig => ({
+  enabled: true,
+  triggerOnImport: true,
+  conditions: {
+    neverFetched: { enabled: false },
+    scoreThreshold: { enabled: false, threshold: 60 },
+    missingFields: { enabled: false, fields: [] },
+  },
+});
+
+describe('BookMetadataFetchEligibilityService', () => {
+  it('treats either ISBN as satisfying the ISBN condition', () => {
+    const service = new BookMetadataFetchEligibilityService();
+    const config = baseConfig();
+    config.conditions.missingFields = { enabled: true, fields: ['isbn'] };
+    expect(service.isEligible(baseBook(), config)).toBe(true);
+    expect(service.isEligible({ ...baseBook(), isbn10: '0306406152' }, config)).toBe(false);
+    expect(service.isEligible({ ...baseBook(), isbn13: '9780306406157' }, config)).toBe(false);
+    expect(service.isEligible({ ...baseBook(), isbn10: '  ', isbn13: '' }, config)).toBe(true);
+  });
+
+  let service: BookMetadataFetchEligibilityService;
+
+  beforeEach(() => {
+    service = new BookMetadataFetchEligibilityService();
+  });
+
+  it('returns true when never fetched condition matches', () => {
+    const book = { ...baseBook(), lastMetadataFetchAt: null };
+    const config = baseConfig();
+    config.conditions.neverFetched.enabled = true;
+
+    expect(service.isEligible(book, config)).toBe(true);
+  });
+
+  it('returns true when score threshold is enabled and score is null', () => {
+    const book = { ...baseBook(), metadataScore: null };
+    const config = baseConfig();
+    config.conditions.scoreThreshold.enabled = true;
+    config.conditions.scoreThreshold.threshold = 70;
+
+    expect(service.isEligible(book, config)).toBe(true);
+  });
+
+  it('returns true when score threshold is enabled and score is below threshold', () => {
+    const book = { ...baseBook(), metadataScore: 55 };
+    const config = baseConfig();
+    config.conditions.scoreThreshold.enabled = true;
+    config.conditions.scoreThreshold.threshold = 60;
+
+    expect(service.isEligible(book, config)).toBe(true);
+  });
+
+  it('returns false when all enabled conditions do not match', () => {
+    const book = baseBook();
+    const config = baseConfig();
+    config.conditions.neverFetched.enabled = true;
+    config.conditions.scoreThreshold.enabled = true;
+    config.conditions.missingFields.enabled = true;
+    config.conditions.missingFields.fields = ['description', 'cover'];
+
+    expect(service.isEligible(book, config)).toBe(false);
+  });
+
+  it('treats new missing-field types as eligible (narrators, duration, abridged)', () => {
+    const config = baseConfig();
+    config.conditions.missingFields.enabled = true;
+
+    const missingNarrators = { ...baseBook(), hasAudioCoverMedia: true, hasNarrators: false };
+    config.conditions.missingFields.fields = ['narrators'];
+    expect(service.isEligible(missingNarrators, config)).toBe(true);
+
+    const missingDuration = { ...baseBook(), hasAudioCoverMedia: true, durationSeconds: null };
+    config.conditions.missingFields.fields = ['duration'];
+    expect(service.isEligible(missingDuration, config)).toBe(true);
+
+    const missingAbridged = { ...baseBook(), hasAudioCoverMedia: true, abridged: null };
+    config.conditions.missingFields.fields = ['abridged'];
+    expect(service.isEligible(missingAbridged, config)).toBe(true);
+  });
+
+  it('never counts narrators, duration or abridged as missing on a book without audio', () => {
+    const config = baseConfig();
+    config.conditions.missingFields.enabled = true;
+    config.conditions.missingFields.fields = ['narrators', 'duration', 'abridged'];
+
+    const ebook = { ...baseBook(), hasAudioCoverMedia: false, hasNarrators: false, durationSeconds: null, abridged: null };
+    expect(service.isEligible(ebook, config)).toBe(false);
+  });
+
+  it('treats a missing community rating as eligible', () => {
+    const book = { ...baseBook(), communityRating: [] };
+    const config = baseConfig();
+    config.conditions.missingFields.enabled = true;
+    config.conditions.missingFields.fields = ['communityRating'];
+
+    expect(service.isEligible(book, config)).toBe(true);
+  });
+
+  it('treats empty strings as missing for scalar text fields', () => {
+    const book = { ...baseBook(), title: '' };
+    const config = baseConfig();
+    config.conditions.missingFields.enabled = true;
+    config.conditions.missingFields.fields = ['title'];
+
+    expect(service.isEligible(book, config)).toBe(true);
+  });
+
+  it('does not treat numeric zero values as missing', () => {
+    const book = { ...baseBook(), pageCount: 0, seriesIndex: 0 };
+    const config = baseConfig();
+    config.conditions.missingFields.enabled = true;
+    config.conditions.missingFields.fields = ['pageCount', 'seriesIndex'];
+
+    expect(service.isEligible(book, config)).toBe(false);
+  });
+
+  it('ignores missing-fields condition when the field list is empty', () => {
+    const book = { ...baseBook(), description: null };
+    const config = baseConfig();
+    config.conditions.missingFields.enabled = true;
+    config.conditions.missingFields.fields = [];
+
+    expect(service.isEligible(book, config)).toBe(false);
+  });
+
+  it('handles remaining missing-field cases and ignores unknown fields', () => {
+    const config = baseConfig();
+    config.conditions.missingFields.enabled = true;
+
+    const cases: Array<{ field: string; book: BookEligibilityData; eligible: boolean }> = [
+      { field: 'authors', book: { ...baseBook(), hasAuthors: false }, eligible: true },
+      { field: 'genres', book: { ...baseBook(), hasGenres: false }, eligible: true },
+      { field: 'tags', book: { ...baseBook(), hasTags: false }, eligible: true },
+      { field: 'subtitle', book: { ...baseBook(), subtitle: '' }, eligible: true },
+      { field: 'publisher', book: { ...baseBook(), publisher: '' }, eligible: true },
+      { field: 'publishedYear', book: { ...baseBook(), publishedYear: null }, eligible: true },
+      { field: 'language', book: { ...baseBook(), language: '' }, eligible: true },
+      { field: 'seriesName', book: { ...baseBook(), seriesName: '' }, eligible: true },
+      { field: 'unknown_field', book: baseBook(), eligible: false },
+    ];
+
+    for (const testCase of cases) {
+      config.conditions.missingFields.fields = [testCase.field as never];
+      expect(service.isEligible(testCase.book, config)).toBe(testCase.eligible);
+    }
+  });
+
+  it('counts the audiobook cover as missing only for a book whose cover media include audio', () => {
+    const config = baseConfig();
+    config.conditions.missingFields.enabled = true;
+    config.conditions.missingFields.fields = ['audioCover'];
+
+    expect(service.isEligible({ ...baseBook(), hasAudioCoverMedia: true, hasAudioCover: false }, config)).toBe(true);
+    expect(service.isEligible({ ...baseBook(), hasAudioCoverMedia: true, hasAudioCover: true }, config)).toBe(false);
+    expect(service.isEligible({ ...baseBook(), hasAudioCoverMedia: false, hasAudioCover: false }, config)).toBe(false);
+  });
+
+  it('keeps the cover trigger meaning no cover at all, so an empty audio slot alone does not queue a book', () => {
+    const config = baseConfig();
+    config.conditions.missingFields.enabled = true;
+    config.conditions.missingFields.fields = ['cover'];
+
+    expect(service.isEligible({ ...baseBook(), hasAudioCoverMedia: true, hasAudioCover: false }, config)).toBe(false);
+  });
+});
