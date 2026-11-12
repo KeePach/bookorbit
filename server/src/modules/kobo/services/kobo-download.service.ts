@@ -17,6 +17,7 @@ import { KoboDownloadHashRegistrationService } from './kobo-download-hash-regist
 import { KoboDownloadRepository } from '../kobo-download.repository';
 import { KoboBookAccessService } from './kobo-book-access.service';
 import { KepubConversionService } from './kepub-conversion.service';
+import { kepubifyOptionsFromSettings, type KepubifyOptions } from './kepubify-options';
 import { KoboSettingsService } from './kobo-settings.service';
 
 /** A narration-free rebuild, living in a temp directory for the length of one download. */
@@ -116,7 +117,7 @@ export class KoboDownloadService implements OnModuleInit {
           file.fileHash ?? 'nohash',
           bookId,
           file.id,
-          settings.forceEnableHyphenation,
+          kepubifyOptionsFromSettings(settings),
           audioless !== null,
           reply,
           audioless?.cleanup,
@@ -201,7 +202,7 @@ export class KoboDownloadService implements OnModuleInit {
     fileHash: string,
     bookId: number,
     fileId: number,
-    hyphenate: boolean,
+    options: KepubifyOptions,
     audioless: boolean,
     reply: FastifyReply,
     cleanup?: () => Promise<void>,
@@ -209,7 +210,7 @@ export class KoboDownloadService implements OnModuleInit {
     const start = Date.now();
     let cachedPath: string | null = null;
     try {
-      cachedPath = await this.kepubConversionService.getKepubPath({ sourcePath, fileHash, bookId, hyphenate, audioless });
+      cachedPath = await this.kepubConversionService.getKepubPath({ sourcePath, fileHash, bookId, options, audioless });
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       this.logger.warn(

@@ -15,6 +15,14 @@ import { BookQueryBuilder } from '../../book/book-query-builder.service';
 import { MetadataExtractionService } from '../../metadata/metadata-extraction.service';
 import { SmartScopeService } from '../../smart-scope/smart-scope.service';
 import { KoboDeliveryService, deliveryErrorCode } from './kobo-delivery.service';
+import {
+  DEFAULT_KEPUBIFY_OPTIONS,
+  DEFAULT_KEPUBIFY_SETTINGS,
+  kepubifyOptionsFromSettings,
+  kepubifyOptionsKey,
+  type KepubifyOptions,
+  type KepubifySettings,
+} from './kepubify-options';
 import { KoboBookAccessService } from './kobo-book-access.service';
 import { KoboBookIdentityService } from './kobo-book-identity.service';
 import { normalizeKoboLanguage, selectKoboIsbn } from './kobo-metadata.utils';
@@ -64,9 +72,8 @@ type Snapshot = typeof schema.koboLibrarySnapshots.$inferSelect;
 
 type LegacySnapshot = Pick<typeof schema.koboLegacyLibrarySnapshots.$inferSelect, 'id' | 'legacyDeviceCutoffAt'>;
 
-type KoboDeliverySettings = {
+type KoboDeliverySettings = KepubifySettings & {
   convertToKepub: boolean;
-  forceEnableHyphenation: boolean;
   kepubConversionLimitMb: number;
 };
 
@@ -1075,9 +1082,10 @@ export class KoboSyncService {
    * `hyphenate` describes the bytes actually delivered, not the announced format, so a hyphenated
    * kepub and a plain one never collide even when both are announced as EPUB3FL.
    */
-  private buildDeliveryHash(format: KoboDeliveryFormat, hyphenate: boolean): string {
+  private buildDeliveryHash(format: KoboDeliveryFormat, options: KepubifyOptions = DEFAULT_KEPUBIFY_OPTIONS): string {
+    const optionsKey = kepubifyOptionsKey(options);
     return createHash('sha256')
-      .update([format, hyphenate ? 'hyphenate' : 'plain'].join('|'))
+      .update([format, options.hyphenate ? 'hyphenate' : 'plain', ...(optionsKey ? [optionsKey] : [])].join('|'))
       .digest('hex')
       .slice(0, 16);
   }
@@ -1091,29 +1099,29 @@ export class KoboSyncService {
     const normalizedFormat = (fileFormat ?? 'epub').toLowerCase();
 
     if (normalizedFormat === 'pdf') {
-      return { format: 'PDF', hash: this.buildDeliveryHash('PDF', false) };
+      return { format: 'PDF', hash: this.buildDeliveryHash('PDF') };
     }
 
     const limitBytes = settings.kepubConversionLimitMb * 1024 * 1024;
     const convertsToKepub = normalizedFormat === 'epub' && settings.convertToKepub && (!fileSizeBytes || fileSizeBytes <= limitBytes);
-    const hyphenated = convertsToKepub && settings.forceEnableHyphenation;
+    const delivered = convertsToKepub ? kepubifyOptionsFromSettings(settings) : DEFAULT_KEPUBIFY_OPTIONS;
 
     // Announcing EPUB3FL is what earns the full-screen renderer; the bytes are deliberately left
     // alone. A kepub renders full screen just the same once the format says fixed layout, and
     // keeping the conversion preserves the KoboSpan positions two-way progress sync depends on.
     if (isFixedLayout && (normalizedFormat === 'epub' || normalizedFormat === 'kepub')) {
-      return { format: 'EPUB3FL', hash: this.buildDeliveryHash('EPUB3FL', hyphenated) };
+      return { format: 'EPUB3FL', hash: this.buildDeliveryHash('EPUB3FL', delivered) };
     }
 
     if (normalizedFormat === 'kepub') {
-      return { format: 'KEPUB', hash: this.buildDeliveryHash('KEPUB', false) };
+      return { format: 'KEPUB', hash: this.buildDeliveryHash('KEPUB') };
     }
 
     if (convertsToKepub) {
-      return { format: 'KEPUB', hash: this.buildDeliveryHash('KEPUB', hyphenated) };
+      return { format: 'KEPUB', hash: this.buildDeliveryHash('KEPUB', delivered) };
     }
 
-    return { format: 'EPUB3', hash: this.buildDeliveryHash('EPUB3', false) };
+    return { format: 'EPUB3', hash: this.buildDeliveryHash('EPUB3') };
   }
 
   /**
@@ -1183,6 +1191,10 @@ export class KoboSyncService {
       columns: {
         convertToKepub: true,
         forceEnableHyphenation: true,
+        kepubCustomCss: true,
+        kepubFullscreenReadingFixes: true,
+        kepubTitlePage: true,
+        kepubDetectCover: true,
         kepubConversionLimitMb: true,
         twoWayProgressSync: true,
       },
@@ -1190,7 +1202,14 @@ export class KoboSyncService {
 
     return {
       convertToKepub: settings?.twoWayProgressSync ? true : (settings?.convertToKepub ?? true),
-      forceEnableHyphenation: settings?.forceEnableHyphenation ?? false,
+      ...DEFAULT_KEPUBIFY_SETTINGS,
+      ...(settings && {
+        forceEnableHyphenation: settings.forceEnableHyphenation,
+        kepubCustomCss: settings.kepubCustomCss,
+        kepubFullscreenReadingFixes: settings.kepubFullscreenReadingFixes,
+        kepubTitlePage: settings.kepubTitlePage,
+        kepubDetectCover: settings.kepubDetectCover,
+      }),
       kepubConversionLimitMb: settings?.kepubConversionLimitMb ?? 100,
     };
   }

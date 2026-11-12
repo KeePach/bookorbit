@@ -5,6 +5,8 @@ import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DB } from '../../../db';
 import * as schema from '../../../db/schema';
 
+import { isSafeKepubCss, kepubifyOptionsFromSettings, kepubifyOptionsKey, type KepubTitlePageMode } from './kepubify-options';
+
 type Db = NodePgDatabase<typeof schema>;
 
 export interface KoboSettings {
@@ -12,6 +14,10 @@ export interface KoboSettings {
   finishedThreshold: number;
   convertToKepub: boolean;
   forceEnableHyphenation: boolean;
+  kepubCustomCss: string;
+  kepubFullscreenReadingFixes: boolean;
+  kepubTitlePage: KepubTitlePageMode;
+  kepubDetectCover: boolean;
   kepubConversionLimitMb: number;
   twoWayProgressSync: boolean;
   syncBookOrbitAnnotationsToKobo: boolean;
@@ -50,6 +56,10 @@ export class KoboSettingsService {
       finishedThreshold: row.finishedThreshold,
       convertToKepub: row.convertToKepub,
       forceEnableHyphenation: row.forceEnableHyphenation,
+      kepubCustomCss: row.kepubCustomCss,
+      kepubFullscreenReadingFixes: row.kepubFullscreenReadingFixes,
+      kepubTitlePage: row.kepubTitlePage,
+      kepubDetectCover: row.kepubDetectCover,
       kepubConversionLimitMb: row.kepubConversionLimitMb,
       twoWayProgressSync: row.twoWayProgressSync,
       syncBookOrbitAnnotationsToKobo: row.syncBookOrbitAnnotationsToKobo,
@@ -72,6 +82,11 @@ export class KoboSettingsService {
       throw new BadRequestException('Reading threshold must be less than finished threshold');
     }
 
+    const newCustomCss = patch.kepubCustomCss ?? current.kepubCustomCss;
+    if (!isSafeKepubCss(newCustomCss)) {
+      throw new BadRequestException('Custom CSS is too long or contains characters that are not allowed');
+    }
+
     const [updated] = await this.db
       .update(schema.koboSyncSettings)
       .set({
@@ -79,6 +94,10 @@ export class KoboSettingsService {
         finishedThreshold: newFinished,
         convertToKepub: newConvertToKepub,
         forceEnableHyphenation: patch.forceEnableHyphenation ?? current.forceEnableHyphenation,
+        kepubCustomCss: newCustomCss,
+        kepubFullscreenReadingFixes: patch.kepubFullscreenReadingFixes ?? current.kepubFullscreenReadingFixes,
+        kepubTitlePage: patch.kepubTitlePage ?? current.kepubTitlePage,
+        kepubDetectCover: patch.kepubDetectCover ?? current.kepubDetectCover,
         kepubConversionLimitMb: patch.kepubConversionLimitMb ?? current.kepubConversionLimitMb,
         twoWayProgressSync: newTwoWayProgressSync,
         syncBookOrbitAnnotationsToKobo: newAnnotationSync,
@@ -103,6 +122,10 @@ export class KoboSettingsService {
       finishedThreshold: updated.finishedThreshold,
       convertToKepub: updated.convertToKepub,
       forceEnableHyphenation: updated.forceEnableHyphenation,
+      kepubCustomCss: updated.kepubCustomCss,
+      kepubFullscreenReadingFixes: updated.kepubFullscreenReadingFixes,
+      kepubTitlePage: updated.kepubTitlePage,
+      kepubDetectCover: updated.kepubDetectCover,
       kepubConversionLimitMb: updated.kepubConversionLimitMb,
       twoWayProgressSync: updated.twoWayProgressSync,
       syncBookOrbitAnnotationsToKobo: updated.syncBookOrbitAnnotationsToKobo,
@@ -113,14 +136,14 @@ export class KoboSettingsService {
   }
 
   private deliverySettingsChanged(
-    current: Pick<KoboSettings, 'convertToKepub' | 'forceEnableHyphenation' | 'kepubConversionLimitMb'>,
-    updated: Pick<KoboSettings, 'convertToKepub' | 'forceEnableHyphenation' | 'kepubConversionLimitMb'>,
+    current: Pick<KoboSettings, 'convertToKepub' | 'kepubConversionLimitMb'> & Parameters<typeof kepubifyOptionsFromSettings>[0],
+    updated: Pick<KoboSettings, 'convertToKepub' | 'kepubConversionLimitMb'> & Parameters<typeof kepubifyOptionsFromSettings>[0],
   ): boolean {
-    return (
-      current.convertToKepub !== updated.convertToKepub ||
-      current.kepubConversionLimitMb !== updated.kepubConversionLimitMb ||
-      ((current.convertToKepub || updated.convertToKepub) && current.forceEnableHyphenation !== updated.forceEnableHyphenation)
-    );
+    if (current.convertToKepub !== updated.convertToKepub || current.kepubConversionLimitMb !== updated.kepubConversionLimitMb) return true;
+    if (!current.convertToKepub && !updated.convertToKepub) return false;
+    const before = kepubifyOptionsFromSettings(current);
+    const after = kepubifyOptionsFromSettings(updated);
+    return before.hyphenate !== after.hyphenate || kepubifyOptionsKey(before) !== kepubifyOptionsKey(after);
   }
 
   private async markSnapshotDeliveryChanged(userId: number): Promise<void> {

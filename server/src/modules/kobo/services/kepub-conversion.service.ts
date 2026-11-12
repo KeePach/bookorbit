@@ -11,12 +11,11 @@ import type { ConfigType } from '@nestjs/config';
 import { storageConfig } from '../../../config/config';
 
 import { KepubifyBinaryService } from './kepubify-binary.service';
-import { findDecodableHrefs, restoreEncodedHrefs, writeWithDecodedHrefs, type DecodedHrefs } from './kepub-href-decoding';
+import { kepubifyArgs, kepubifyOptionsKey, type KepubifyOptions } from './kepubify-options';
 
 const execFileAsync = promisify(execFile);
 const KEPUBIFY_TIMEOUT_MS = 60_000;
 const AUDIOLESS_EPUB_CACHE_VERSION = 1;
-const HREF_DECODING_MEMO_LIMIT = 256;
 const CACHED_DIGEST_SCAN_LIMIT = 16;
 
 async function sha256OfFile(path: string): Promise<string> {
@@ -29,7 +28,7 @@ interface KepubConversionInput {
   sourcePath: string;
   fileHash?: string | null;
   bookId: number;
-  hyphenate: boolean;
+  options: KepubifyOptions;
   /**
    * The source was rebuilt without its narration. It carries the original file's hash, so it needs
    * its own cache entry to avoid being served in place of a conversion of the full archive.
@@ -48,7 +47,6 @@ export class KepubConversionService {
   private readonly leases = new Map<string, number>();
   private publication: Promise<void> = Promise.resolve();
   private readonly conversions = new Map<string, Promise<string>>();
-  private readonly hrefDecodings = new Map<string, Promise<DecodedHrefs>>();
 
   constructor(
     @Inject(storageConfig.KEY) storage: ConfigType<typeof storageConfig>,
@@ -107,14 +105,15 @@ export class KepubConversionService {
   async getKepubPath(input: KepubConversionInput): Promise<string> {
     const cacheDir = join(this.kepubCachePath, String(input.bookId));
     const fileHash = input.fileHash ?? 'nohash';
-    // Keep the original two key shapes byte for byte so existing cache entries still hit.
-    // A book kepubify reads as is keeps its key byte for byte, so only the books it used to leave
-    // unconverted are converted again.
-    const decodedHrefs = await this.decodableHrefs(input);
-    const legacyKey = `${fileHash}${input.audioless ? `-noaudio-v${AUDIOLESS_EPUB_CACHE_VERSION}` : ''}${input.hyphenate ? '-hyph' : ''}${decodedHrefs.size ? '-hrefs' : ''}`;
+    // Keep the original two key shapes byte for byte so existing cache entries still hit. The options key is
+    // empty for the defaults, and every other option adds to it.
+    const optionsKey = kepubifyOptionsKey(input.options);
+    const legacyKey = `${fileHash}${input.audioless ? `-noaudio-v${AUDIOLESS_EPUB_CACHE_VERSION}` : ''}${input.options.hyphenate ? '-hyph' : ''}${optionsKey ? `-o${optionsKey}` : ''}`;
     const cacheKey = input.sourceRevision
       ? createHash('sha256')
-          .update(`${input.sourceRevision}:${await this.kepubifyBinaryService.getVersion()}:${input.hyphenate}${decodedHrefs.size ? ':hrefs' : ''}`)
+          .update(
+            `${input.sourceRevision}:${await this.kepubifyBinaryService.getVersion()}:${input.options.hyphenate}${optionsKey ? `:${optionsKey}` : ''}`,
+          )
           .digest('hex')
       : legacyKey;
     const cachedPath = join(cacheDir, `${cacheKey}.kepub.epub`);
@@ -132,7 +131,7 @@ export class KepubConversionService {
 
     const concurrent = this.conversions.get(cachedPath);
     if (concurrent) return concurrent;
-    const conversion = this.convertToCache(input, cacheDir, cachedPath, decodedHrefs);
+    const conversion = this.convertToCache(input, cacheDir, cachedPath);
     this.conversions.set(cachedPath, conversion);
     try {
       return await conversion;
@@ -141,7 +140,7 @@ export class KepubConversionService {
     }
   }
 
-  private async convertToCache(input: KepubConversionInput, cacheDir: string, cachedPath: string, decodedHrefs: DecodedHrefs): Promise<string> {
+  private async convertToCache(input: KepubConversionInput, cacheDir: string, cachedPath: string): Promise<string> {
     if (this.active >= 2) {
       if (this.waiters.length >= 32) throw new BadRequestException({ code: 'DELIVERY_BUSY' });
       await new Promise<void>((resolve, reject) => {
@@ -168,18 +167,7 @@ export class KepubConversionService {
       const tempDir = await mkdtemp(join(cacheDir, '.conversion-'));
       const outputPath = join(tempDir, 'book.kepub.epub');
       try {
-        if (decodedHrefs.size) {
-          const sourcePath = join(tempDir, 'source.epub');
-          const convertedPath = join(tempDir, 'converted.kepub.epub');
-          await writeWithDecodedHrefs(input.sourcePath, sourcePath, decodedHrefs);
-          await this.runKepubify(binaryPath, sourcePath, convertedPath, input.hyphenate);
-          const restored = await restoreEncodedHrefs(convertedPath, outputPath, decodedHrefs);
-          this.logger.log(
-            `[kobo.kepub_href_decoding] [end] bookId=${input.bookId} decoded=${decodedHrefs.size} restored=${restored} - converted chapters kepubify could not find by their encoded href`,
-          );
-        } else {
-          await this.runKepubify(binaryPath, input.sourcePath, outputPath, input.hyphenate);
-        }
+        await this.runKepubify(binaryPath, input.sourcePath, outputPath, input.options);
         // Readers and the cache recovery pass must never see a partially written conversion.
         const publication = this.publication.then(async () => {
           if (input.sourceRevision) await this.evict(cachedPath, (await stat(outputPath)).size);
@@ -197,20 +185,8 @@ export class KepubConversionService {
       else this.active--;
     }
   }
-  private async runKepubify(binaryPath: string, sourcePath: string, outputPath: string, hyphenate: boolean): Promise<void> {
-    const args = hyphenate ? ['--hyphenate', '--output', outputPath, sourcePath] : ['--output', outputPath, sourcePath];
-    await execFileAsync(binaryPath, args, { timeout: KEPUBIFY_TIMEOUT_MS });
-  }
-
-  private decodableHrefs(input: KepubConversionInput): Promise<DecodedHrefs> {
-    const key = `${input.sourcePath}\0${input.sourceRevision ?? input.fileHash ?? ''}`;
-    let pending = this.hrefDecodings.get(key);
-    if (!pending) {
-      pending = findDecodableHrefs(input.sourcePath).catch(() => new Map<string, string>());
-      if (this.hrefDecodings.size >= HREF_DECODING_MEMO_LIMIT) this.hrefDecodings.delete(this.hrefDecodings.keys().next().value!);
-      this.hrefDecodings.set(key, pending);
-    }
-    return pending;
+  private async runKepubify(binaryPath: string, sourcePath: string, outputPath: string, options: KepubifyOptions): Promise<void> {
+    await execFileAsync(binaryPath, [...kepubifyArgs(options), '--output', outputPath, sourcePath], { timeout: KEPUBIFY_TIMEOUT_MS });
   }
 
   private async evict(publishingPath: string, requiredBytes: number): Promise<void> {
@@ -227,7 +203,7 @@ export class KepubConversionService {
           if (Date.now() - info.mtimeMs > 20 * 60_000) await rm(path, { recursive: true, force: true });
           continue;
         }
-        if (!entry.isFile() || !/^[a-f0-9]{32,64}(?:-noaudio-v\d+)?(?:-hyph)?(?:-hrefs)?\.kepub\.epub$/.test(entry.name)) continue;
+        if (!entry.isFile() || !/^[a-f0-9]{32,64}(?:-noaudio-v\d+)?(?:-hyph)?(?:-hrefs)?(?:-o[a-f0-9]{8})?\.kepub\.epub$/.test(entry.name)) continue;
         const info = await stat(path);
         total += info.size;
         count++;

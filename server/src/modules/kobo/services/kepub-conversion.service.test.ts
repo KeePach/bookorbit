@@ -1,6 +1,5 @@
 vi.mock('fs/promises', () => ({ mkdir: vi.fn(), mkdtemp: vi.fn(), rename: vi.fn(), rm: vi.fn(), stat: vi.fn() }));
 vi.mock('child_process', () => ({ execFile: vi.fn() }));
-vi.mock('./kepub-href-decoding', () => ({ findDecodableHrefs: vi.fn(), writeWithDecodedHrefs: vi.fn(), restoreEncodedHrefs: vi.fn() }));
 
 import { Test } from '@nestjs/testing';
 import { storageConfig } from '../../../config/config';
@@ -8,12 +7,13 @@ import { execFile } from 'child_process';
 import { mkdir, mkdtemp, rename, rm, stat } from 'fs/promises';
 
 import { KepubConversionService } from './kepub-conversion.service';
-import { findDecodableHrefs, restoreEncodedHrefs, writeWithDecodedHrefs } from './kepub-href-decoding';
 import { KepubifyBinaryService } from './kepubify-binary.service';
+import { DEFAULT_KEPUBIFY_OPTIONS, kepubifyOptionsKey, type KepubifyOptions } from './kepubify-options';
 
 const execMock = vi.mocked(execFile);
 const statMock = vi.mocked(stat);
-const input = { sourcePath: '/books/source.epub', fileHash: 'abc', bookId: 44, hyphenate: false };
+const options = (patch: Partial<KepubifyOptions> = {}): KepubifyOptions => ({ ...DEFAULT_KEPUBIFY_OPTIONS, ...patch });
+const input = { sourcePath: '/books/source.epub', fileHash: 'abc', bookId: 44, options: options() };
 const cacheDir = '/app-data/.kepub-cache/44';
 const tempDir = `${cacheDir}/.conversion-unit-test`;
 const tempPath = `${tempDir}/book.kepub.epub`;
@@ -38,9 +38,6 @@ describe('KepubConversionService', () => {
     vi.mocked(rename).mockResolvedValue(undefined);
     vi.mocked(rm).mockResolvedValue(undefined);
     successfulConversion();
-    vi.mocked(findDecodableHrefs).mockResolvedValue(new Map());
-    vi.mocked(writeWithDecodedHrefs).mockResolvedValue(undefined);
-    vi.mocked(restoreEncodedHrefs).mockResolvedValue(1);
     const module = await Test.createTestingModule({
       providers: [
         KepubConversionService,
@@ -68,7 +65,9 @@ describe('KepubConversionService', () => {
     { hash: null, hyphenate: false, audioless: false, key: 'nohash' },
     { hash: undefined, hyphenate: false, audioless: false, key: 'nohash' },
   ])('publishes a complete conversion with the compatible $key cache key', async ({ hash, hyphenate, audioless, key }) => {
-    await expect(service.getKepubPath({ ...input, fileHash: hash, hyphenate, audioless })).resolves.toBe(`${cacheDir}/${key}.kepub.epub`);
+    await expect(service.getKepubPath({ ...input, fileHash: hash, options: options({ hyphenate }), audioless })).resolves.toBe(
+      `${cacheDir}/${key}.kepub.epub`,
+    );
     expect(mkdir).toHaveBeenCalledWith(cacheDir, { recursive: true });
     expect(mkdtemp).toHaveBeenCalledWith(`${cacheDir}/.conversion-`);
     expect(execMock).toHaveBeenCalledWith(
@@ -106,7 +105,7 @@ describe('KepubConversionService', () => {
       service.getKepubPath(input),
       service.getKepubPath({ ...input, fileHash: 'def' }),
       service.getKepubPath({ ...input, bookId: 45 }),
-      service.getKepubPath({ ...input, hyphenate: true }),
+      service.getKepubPath({ ...input, options: options({ hyphenate: true }) }),
       service.getKepubPath({ ...input, audioless: true }),
     ]);
     expect(execMock).toHaveBeenCalledTimes(5);
@@ -143,41 +142,49 @@ describe('KepubConversionService', () => {
     expect(rm).not.toHaveBeenCalled();
   });
 
-  describe('books listing chapters by percent-encoded hrefs (#1136)', () => {
-    const decoded = new Map([['text/chapter one.xhtml', 'text/chapter%20one.xhtml']]);
+  describe('conversion options', () => {
+    const styled = options({ css: 'p { margin: 0 }', fullscreenReadingFixes: true, titlePage: 'off', detectCover: true });
 
-    it('converts them through a decoded copy, restores their hrefs, and caches them under their own key', async () => {
-      vi.mocked(findDecodableHrefs).mockResolvedValue(decoded);
+    it('passes every enabled option to kepubify before the output path', async () => {
+      await service.getKepubPath({ ...input, options: { ...styled, hyphenate: true } });
 
-      await expect(service.getKepubPath(input)).resolves.toBe(`${cacheDir}/abc-hrefs.kepub.epub`);
-
-      expect(writeWithDecodedHrefs).toHaveBeenCalledWith(input.sourcePath, `${tempDir}/source.epub`, decoded);
       expect(execMock).toHaveBeenCalledWith(
         '/tools/kepubify',
-        ['--output', `${tempDir}/converted.kepub.epub`, `${tempDir}/source.epub`],
+        [
+          '--hyphenate',
+          '--css',
+          'p { margin: 0 }',
+          '--fullscreen-reading-fixes',
+          '--no-add-dummy-titlepage',
+          '--detect-cover',
+          '--output',
+          tempPath,
+          input.sourcePath,
+        ],
         { timeout: 60_000 },
         expect.any(Function),
       );
-      expect(restoreEncodedHrefs).toHaveBeenCalledWith(`${tempDir}/converted.kepub.epub`, tempPath, decoded);
-      expect(rename).toHaveBeenCalledExactlyOnceWith(tempPath, `${cacheDir}/abc-hrefs.kepub.epub`);
     });
 
-    it('inspects a source once, not on every lookup', async () => {
-      statMock.mockResolvedValue({} as never);
+    it('caches a conversion with other options under its own key, keeping the hyphenation suffix', async () => {
+      const key = kepubifyOptionsKey(styled);
 
-      await service.getKepubPath(input);
-      await service.getKepubPath(input);
-
-      expect(findDecodableHrefs).toHaveBeenCalledTimes(1);
+      await expect(service.getKepubPath({ ...input, options: styled })).resolves.toBe(`${cacheDir}/abc-o${key}.kepub.epub`);
+      await expect(service.getKepubPath({ ...input, options: { ...styled, hyphenate: true } })).resolves.toBe(
+        `${cacheDir}/abc-hyph-o${key}.kepub.epub`,
+      );
     });
 
-    it('converts a source it cannot inspect as is, under the key it always had', async () => {
-      vi.mocked(findDecodableHrefs).mockRejectedValue(new Error('not a zip'));
+    it('does not coalesce conversions that differ only in an option', async () => {
+      await Promise.all([
+        service.getKepubPath(input),
+        service.getKepubPath({ ...input, options: options({ css: 'p { margin: 0 }' }) }),
+        service.getKepubPath({ ...input, options: options({ css: 'p { margin: 1em }' }) }),
+        service.getKepubPath({ ...input, options: options({ detectCover: true }) }),
+      ]);
 
-      await expect(service.getKepubPath(input)).resolves.toBe(`${cacheDir}/abc.kepub.epub`);
-
-      expect(writeWithDecodedHrefs).not.toHaveBeenCalled();
-      expect(execMock).toHaveBeenCalledWith('/tools/kepubify', ['--output', tempPath, input.sourcePath], { timeout: 60_000 }, expect.any(Function));
+      expect(execMock).toHaveBeenCalledTimes(4);
+      expect(rename).toHaveBeenCalledTimes(4);
     });
   });
 });

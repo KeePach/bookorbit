@@ -9,6 +9,7 @@ import { KoboBookAccessService } from './kobo-book-access.service';
 import { KoboSettingsService } from './kobo-settings.service';
 import { KepubConversionService } from './kepub-conversion.service';
 import { KepubifyBinaryService } from './kepubify-binary.service';
+import { kepubifyOptionsFromDelivery, kepubifyOptionsFromSettings, storedKepubifyOptions } from './kepubify-options';
 import { sanitizeLogValue } from '../../../common/utils/log-sanitize.utils';
 import { computeFileHashFromHandle } from '../../../common/utils/file-hash.utils';
 import { kepubContentDigest } from './kepub-content-digest';
@@ -87,6 +88,7 @@ export class KoboDeliveryService {
       },
       policy,
     );
+    const kepubifyOptions = kepubifyOptionsFromSettings(settings);
     let converterVersion: string | null = null;
     let contentDigest: string | undefined;
     let conversionRelease: (() => Promise<void>) | undefined;
@@ -105,7 +107,7 @@ export class KoboDeliveryService {
             fileHash: artifact.sha256,
             sourceRevision: artifact.sha256,
             bookId,
-            hyphenate: settings.forceEnableHyphenation,
+            options: kepubifyOptions,
             audioless: artifact.actualVariant === 'audioless_epub',
           });
           conversionRelease = converted.release;
@@ -141,7 +143,8 @@ export class KoboDeliveryService {
           sourceFileId: file.id,
           metadata,
           options: {
-            hyphenate: settings.forceEnableHyphenation,
+            hyphenate: kepubifyOptions.hyphenate,
+            kepubify: storedKepubifyOptions(kepubifyOptions),
             converterVersion,
             replacement: replacementVariant !== undefined,
             ...(contentDigest ? { kepubContentDigest: contentDigest } : {}),
@@ -239,7 +242,7 @@ export class KoboDeliveryService {
           fileHash: artifact.sha256,
           sourceRevision: artifact.sha256,
           bookId: record.bookId,
-          hyphenate: record.options.hyphenate,
+          options: kepubifyOptionsFromDelivery(record.options.hyphenate, record.options.kepubify),
           audioless: artifact.actualVariant === 'audioless_epub',
         });
         artifact.path = converted.path;

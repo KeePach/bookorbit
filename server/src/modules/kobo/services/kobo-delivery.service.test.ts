@@ -15,6 +15,7 @@ import {
   isUnconfirmedReplacement,
   type KoboDeliveryRecord,
 } from './kobo-delivery.service';
+import { DEFAULT_KEPUBIFY_OPTIONS } from './kepubify-options';
 
 function record(overrides: Partial<KoboDeliveryRecord> = {}): KoboDeliveryRecord {
   return {
@@ -412,6 +413,31 @@ describe('KoboDeliveryService.resolve with a rebuilt KEPUB', () => {
     const exact = makeResolver(delivered);
     await exact.service.resolve(1, 2, legacy);
     expect(exact.repository.setKepubContentDigest).toHaveBeenCalledWith(1, 2, 'stale', await kepubContentDigest(delivered));
+  });
+
+  it('rebuilds a delivery with the options it was made with, not the current settings', async () => {
+    const delivered = await writeKepub('delivered.kepub.epub', [...BASE, chapter('One.')]);
+    const { service, conversion } = makeResolver(delivered);
+    const stored = { css: 'p { margin: 0 }', detectCover: true };
+
+    await service.resolve(
+      1,
+      2,
+      kepubRecord(await sha256Of(delivered), { hyphenate: true, kepubify: stored, kepubContentDigest: await kepubContentDigest(delivered) }),
+    );
+
+    expect(conversion.acquireKepub).toHaveBeenCalledWith(
+      expect.objectContaining({ options: { ...DEFAULT_KEPUBIFY_OPTIONS, hyphenate: true, ...stored } }),
+    );
+  });
+
+  it('rebuilds a delivery from before these options existed with the defaults', async () => {
+    const delivered = await writeKepub('delivered.kepub.epub', [...BASE, chapter('One.')]);
+    const { service, conversion } = makeResolver(delivered);
+
+    await service.resolve(1, 2, kepubRecord(await sha256Of(delivered), { kepubContentDigest: await kepubContentDigest(delivered) }));
+
+    expect(conversion.acquireKepub).toHaveBeenCalledWith(expect.objectContaining({ options: DEFAULT_KEPUBIFY_OPTIONS }));
   });
 
   it('tries another converter version only when a digest can confirm the content', async () => {

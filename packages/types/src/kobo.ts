@@ -11,11 +11,19 @@ export interface KoboDeviceWithToken extends KoboDevice {
   token: string;
 }
 
+export const KOBO_KEPUB_TITLE_PAGE_MODES = ["auto", "on", "off"] as const;
+export type KoboKepubTitlePageMode = (typeof KOBO_KEPUB_TITLE_PAGE_MODES)[number];
+export const KOBO_KEPUB_CUSTOM_CSS_MAX_LENGTH = 10000;
+
 export interface KoboSyncSettings {
   readingThreshold: number;
   finishedThreshold: number;
   convertToKepub: boolean;
   forceEnableHyphenation: boolean;
+  kepubCustomCss: string;
+  kepubFullscreenReadingFixes: boolean;
+  kepubTitlePage: KoboKepubTitlePageMode;
+  kepubDetectCover: boolean;
   kepubConversionLimitMb: number;
   twoWayProgressSync: boolean;
   syncBookOrbitAnnotationsToKobo: boolean;
@@ -56,6 +64,10 @@ export interface UpdateKoboSyncSettingsRequest {
   finishedThreshold?: number;
   convertToKepub?: boolean;
   forceEnableHyphenation?: boolean;
+  kepubCustomCss?: string;
+  kepubFullscreenReadingFixes?: boolean;
+  kepubTitlePage?: KoboKepubTitlePageMode;
+  kepubDetectCover?: boolean;
   kepubConversionLimitMb?: number;
   twoWayProgressSync?: boolean;
   syncBookOrbitAnnotationsToKobo?: boolean;

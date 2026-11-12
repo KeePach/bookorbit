@@ -54,6 +54,10 @@ export const koboSyncSettings = pgTable(
     finishedThreshold: real('finished_threshold').notNull().default(99),
     convertToKepub: boolean('convert_to_kepub').notNull().default(true),
     forceEnableHyphenation: boolean('force_enable_hyphenation').notNull().default(false),
+    kepubCustomCss: text('kepub_custom_css').notNull().default(''),
+    kepubFullscreenReadingFixes: boolean('kepub_fullscreen_reading_fixes').notNull().default(false),
+    kepubTitlePage: varchar('kepub_title_page', { length: 8 }).$type<'auto' | 'on' | 'off'>().notNull().default('auto'),
+    kepubDetectCover: boolean('kepub_detect_cover').notNull().default(false),
     kepubConversionLimitMb: integer('kepub_conversion_limit_mb').notNull().default(100),
     twoWayProgressSync: boolean('two_way_progress_sync').notNull().default(false),
     syncBookOrbitAnnotationsToKobo: boolean('sync_bookorbit_annotations_to_kobo').notNull().default(false),
@@ -70,6 +74,8 @@ export const koboSyncSettings = pgTable(
     check('kobo_sync_settings_reading_threshold_range_chk', sql`${t.readingThreshold} >= 0 and ${t.readingThreshold} <= 100`),
     check('kobo_sync_settings_finished_threshold_range_chk', sql`${t.finishedThreshold} >= 0 and ${t.finishedThreshold} <= 100`),
     check('kobo_sync_settings_conversion_limit_nonnegative_chk', sql`${t.kepubConversionLimitMb} >= 0`),
+    check('kobo_sync_settings_kepub_title_page_chk', sql`${t.kepubTitlePage} in ('auto', 'on', 'off')`),
+    check('kobo_sync_settings_kepub_custom_css_length_chk', sql`char_length(${t.kepubCustomCss}) <= 10000`),
   ],
 );
 
@@ -321,6 +327,7 @@ export const koboDeviceDeliveries = pgTable(
     options: jsonb('options')
       .$type<{
         hyphenate: boolean;
+        kepubify?: { css?: string; fullscreenReadingFixes?: boolean; titlePage?: 'auto' | 'on' | 'off'; detectCover?: boolean };
         converterVersion: string | null;
         replacement?: boolean;
         // kepubify writes entries in no fixed order, so a rebuild of the same conversion is recognised by this, not by sha256.

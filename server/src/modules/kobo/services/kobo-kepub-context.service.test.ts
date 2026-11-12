@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { KoboKepubContextService } from './kobo-kepub-context.service';
+import { DEFAULT_KEPUBIFY_OPTIONS, DEFAULT_KEPUBIFY_SETTINGS, kepubifyOptionsKey } from './kepubify-options';
 
 function makeContext(format: string, convertToKepub = true) {
   const file = { id: 12, bookId: 3, absolutePath: '/library/book.kepub', format, fileHash: 'hash', sizeBytes: 200 };
   const reader = { findPrimaryReaderFilesByBookIds: vi.fn().mockResolvedValue([file]) };
-  const settings = { convertToKepub, forceEnableHyphenation: true, kepubConversionLimitMb: 0 };
+  const settings = { convertToKepub, ...DEFAULT_KEPUBIFY_SETTINGS, forceEnableHyphenation: true, kepubConversionLimitMb: 0 };
   const conversion = { getKepubPath: vi.fn().mockResolvedValue('/library/converted.kepub') };
   const binary = { getVersion: vi.fn().mockResolvedValue('test-version') };
   const service = new KoboKepubContextService(
@@ -37,7 +38,21 @@ describe('KoboKepubContextService', () => {
       ok: true,
       ctx: { kepubPath: '/library/converted.kepub', hyphenate: true, kepubifyVersion: 'test-version' },
     });
-    expect(conversion.getKepubPath).toHaveBeenCalledWith({ sourcePath: file.absolutePath, fileHash: 'hash', bookId: 3, hyphenate: true });
+    expect(conversion.getKepubPath).toHaveBeenCalledWith({
+      sourcePath: file.absolutePath,
+      fileHash: 'hash',
+      bookId: 3,
+      options: { ...DEFAULT_KEPUBIFY_OPTIONS, hyphenate: true },
+    });
+  });
+
+  it('keys the position context by the conversion options, so a style change is not mistaken for the same rendition', async () => {
+    const { service, settings } = makeContext('epub');
+    settings.kepubConversionLimitMb = 100;
+    Object.assign(settings, { kepubCustomCss: 'p { margin: 0 }', kepubDetectCover: true });
+    const key = kepubifyOptionsKey({ ...DEFAULT_KEPUBIFY_OPTIONS, css: 'p { margin: 0 }', detectCover: true });
+
+    expect(await service.resolveForBook(7, 3)).toMatchObject({ ok: true, ctx: { optionsKey: key } });
   });
 
   it('keeps unsupported formats and disabled EPUB conversion degraded', async () => {

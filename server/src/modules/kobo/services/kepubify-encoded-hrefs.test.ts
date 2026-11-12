@@ -6,8 +6,8 @@ import { promisify } from 'util';
 import { ZipArchive } from 'archiver';
 import * as unzipper from 'unzipper';
 
-import { findDecodableHrefs, restoreEncodedHrefs, writeWithDecodedHrefs } from './kepub-href-decoding';
 import { KepubifyBinaryService } from './kepubify-binary.service';
+import { DEFAULT_KEPUBIFY_OPTIONS, kepubifyArgs } from './kepubify-options';
 
 const execFileAsync = promisify(execFile);
 
@@ -78,7 +78,7 @@ function hasSpans(xhtml: string | undefined): boolean {
   return (xhtml ?? '').includes('koboSpan');
 }
 
-describe('kepub href decoding (real kepubify)', () => {
+describe('kepubify with percent-encoded manifest hrefs (real kepubify)', () => {
   let dir: string;
   let epubPath: string;
   let kepubify: string;
@@ -94,57 +94,13 @@ describe('kepub href decoding (real kepubify)', () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  it('finds the hrefs that resolve only once decoded, keyed by the stored name', async () => {
-    const decoded = await findDecodableHrefs(epubPath);
-
-    expect(Object.fromEntries(decoded)).toEqual({
-      'text/chapter one.xhtml': 'text/chapter%20one.xhtml',
-      'text/chapter one.xhtml#start': 'text/chapter%20one.xhtml#start',
-      'text/notes & more.xhtml': 'text/notes%20%26%20more.xhtml',
-      'text/part#1.xhtml': 'text/part%231.xhtml',
-    });
-  });
-
-  it('documents why: kepubify leaves a chapter listed by its encoded href unconverted', async () => {
-    const out = join(dir, 'as-is.kepub.epub');
-    await execFileAsync(kepubify, ['--output', out, epubPath], { timeout: 60_000 });
+  it('converts every chapter and keeps the hrefs the book lists', async () => {
+    const out = join(dir, 'out.kepub.epub');
+    await execFileAsync(kepubify, [...kepubifyArgs(DEFAULT_KEPUBIFY_OPTIONS), '--output', out, epubPath], { timeout: 60_000 });
     const entries = await readEntries(out);
 
-    expect(hasSpans(entries.get('OEBPS/text/chapter one.xhtml'))).toBe(false);
-    expect(hasSpans(entries.get('OEBPS/text/plain.xhtml'))).toBe(true);
-  }, 60_000);
-
-  it('converts every chapter and hands back the package with the book’s own hrefs', async () => {
-    const decoded = await findDecodableHrefs(epubPath);
-    const source = join(dir, 'decoded.epub');
-    const converted = join(dir, 'converted.kepub.epub');
-    const restoredPath = join(dir, 'restored.kepub.epub');
-
-    await writeWithDecodedHrefs(epubPath, source, decoded);
-    const decodedOpf = (await readEntries(source)).get('OEBPS/content.opf')!;
-    expect(decodedOpf).toContain('href="text/notes &amp; more.xhtml"');
-    expect(decodedOpf).toContain('href="text/stored%20as%20written.xhtml"');
-
-    await execFileAsync(kepubify, ['--output', converted, source], { timeout: 60_000 });
-    const restored = await restoreEncodedHrefs(converted, restoredPath, decoded);
-    const entries = await readEntries(restoredPath);
-
-    expect(restored).toBe(4);
-    for (const name of ['OEBPS/text/chapter one.xhtml', 'OEBPS/text/notes & more.xhtml', 'OEBPS/text/part#1.xhtml', 'OEBPS/text/plain.xhtml']) {
-      expect(hasSpans(entries.get(name)), name).toBe(true);
-    }
-    // kepubify adds a title page of its own once it can read the first chapter; every other href is the book's.
+    for (const [name] of ENTRIES) expect(hasSpans(entries.get(name)), name).toBe(true);
     const hrefs = hrefAttributes(entries.get('OEBPS/content.opf')!);
     expect(hrefs.filter((href) => !href.startsWith('kepubify-'))).toEqual(hrefAttributes(CONTENT_OPF));
-    const first = (await unzipper.Open.file(restoredPath)).files[0]!;
-    expect(first.path).toBe('mimetype');
-    expect(first.compressionMethod).toBe(0);
   }, 60_000);
-
-  it('rejects input that is not an archive, so the caller falls back to converting it as is', async () => {
-    const notAnEpub = join(dir, 'not-an.epub');
-    await writeFile(notAnEpub, 'plain text');
-
-    await expect(findDecodableHrefs(notAnEpub)).rejects.toThrow();
-  });
 });

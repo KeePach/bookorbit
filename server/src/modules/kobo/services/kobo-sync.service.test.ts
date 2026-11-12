@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import * as schema from '../../../db/schema';
 import { encodeSyncToken } from './kobo-sync-token';
 import { KoboSyncService, SYNC_PAGE_SIZE } from './kobo-sync.service';
+import { DEFAULT_KEPUBIFY_SETTINGS } from './kepubify-options';
 
 // Recursively counts bound query params (drizzle-orm's `Param` chunks) in a built SQL tree,
 // so tests can assert a clause isn't binding one parameter per matched book id.
@@ -1249,21 +1250,25 @@ describe('KoboSyncService', () => {
 
     const kepub = (service as any).getDeliveryInfo('epub', 1024, {
       convertToKepub: true,
+      ...DEFAULT_KEPUBIFY_SETTINGS,
       forceEnableHyphenation: false,
       kepubConversionLimitMb: 1,
     });
     const hyphenatedKepub = (service as any).getDeliveryInfo('epub', 1024, {
       convertToKepub: true,
+      ...DEFAULT_KEPUBIFY_SETTINGS,
       forceEnableHyphenation: true,
       kepubConversionLimitMb: 1,
     });
     const oversizedEpub = (service as any).getDeliveryInfo('epub', 2 * 1024 * 1024, {
       convertToKepub: true,
+      ...DEFAULT_KEPUBIFY_SETTINGS,
       forceEnableHyphenation: false,
       kepubConversionLimitMb: 1,
     });
     const disabledEpub = (service as any).getDeliveryInfo('epub', 1024, {
       convertToKepub: false,
+      ...DEFAULT_KEPUBIFY_SETTINGS,
       forceEnableHyphenation: true,
       kepubConversionLimitMb: 1,
     });
@@ -1276,6 +1281,7 @@ describe('KoboSyncService', () => {
     expect(
       (service as any).getDeliveryInfo('pdf', 1024, {
         convertToKepub: false,
+        ...DEFAULT_KEPUBIFY_SETTINGS,
         forceEnableHyphenation: true,
         kepubConversionLimitMb: 1,
       }).format,
@@ -1283,6 +1289,7 @@ describe('KoboSyncService', () => {
 
     const nativeKepub = (service as any).getDeliveryInfo('kepub', 1024, {
       convertToKepub: false,
+      ...DEFAULT_KEPUBIFY_SETTINGS,
       forceEnableHyphenation: false,
       kepubConversionLimitMb: 1,
     });
@@ -1291,7 +1298,7 @@ describe('KoboSyncService', () => {
   });
 
   describe('fixed-layout (comic) delivery', () => {
-    const settings = { convertToKepub: true, forceEnableHyphenation: false, kepubConversionLimitMb: 1 };
+    const settings = { convertToKepub: true, ...DEFAULT_KEPUBIFY_SETTINGS, forceEnableHyphenation: false, kepubConversionLimitMb: 1 };
 
     it('announces a fixed-layout epub as EPUB3FL so the device renders it full screen', () => {
       const service = makeService(makeDb());
@@ -1330,7 +1337,12 @@ describe('KoboSyncService', () => {
       const service = makeService(makeDb());
 
       const plain = (service as any).getDeliveryInfo('epub', 1024, settings, true);
-      const hyphenated = (service as any).getDeliveryInfo('epub', 1024, { ...settings, forceEnableHyphenation: true }, true);
+      const hyphenated = (service as any).getDeliveryInfo(
+        'epub',
+        1024,
+        { ...settings, ...DEFAULT_KEPUBIFY_SETTINGS, forceEnableHyphenation: true },
+        true,
+      );
 
       expect(plain.format).toBe('EPUB3FL');
       expect(hyphenated.format).toBe('EPUB3FL');
@@ -1342,7 +1354,12 @@ describe('KoboSyncService', () => {
 
       const noConversion = { ...settings, convertToKepub: false };
       const plain = (service as any).getDeliveryInfo('epub', 1024, noConversion, true);
-      const hyphenated = (service as any).getDeliveryInfo('epub', 1024, { ...noConversion, forceEnableHyphenation: true }, true);
+      const hyphenated = (service as any).getDeliveryInfo(
+        'epub',
+        1024,
+        { ...noConversion, ...DEFAULT_KEPUBIFY_SETTINGS, forceEnableHyphenation: true },
+        true,
+      );
 
       expect(hyphenated.hash).toBe(plain.hash);
     });
@@ -1486,16 +1503,43 @@ describe('KoboSyncService', () => {
   // implementation produced and they must not move.
   it('keeps delivery hashes for non-comic books byte-identical to the previous implementation', () => {
     const service = makeService(makeDb());
-    const base = { convertToKepub: true, forceEnableHyphenation: false, kepubConversionLimitMb: 1 };
+    const base = { convertToKepub: true, ...DEFAULT_KEPUBIFY_SETTINGS, forceEnableHyphenation: false, kepubConversionLimitMb: 1 };
 
     expect((service as any).getDeliveryInfo('pdf', 1024, base, null).hash).toBe('6c4931d80e7cbf0d');
     expect((service as any).getDeliveryInfo('kepub', 1024, base, null).hash).toBe('2f55f4d028ef859c');
     expect((service as any).getDeliveryInfo('epub', 1024, base, null).hash).toBe('2f55f4d028ef859c');
-    expect((service as any).getDeliveryInfo('epub', 1024, { ...base, forceEnableHyphenation: true }, null).hash).toBe('990477a32a0f0d75');
+    expect((service as any).getDeliveryInfo('epub', 1024, { ...base, ...DEFAULT_KEPUBIFY_SETTINGS, forceEnableHyphenation: true }, null).hash).toBe(
+      '990477a32a0f0d75',
+    );
     expect((service as any).getDeliveryInfo('epub', 1024, { ...base, convertToKepub: false }, null).hash).toBe('90fb0bb55cca2fd2');
     expect((service as any).getDeliveryInfo('epub', 2 * 1024 * 1024, base, null).hash).toBe('90fb0bb55cca2fd2');
     // Hyphenation must not leak into the hash of a book that is never converted.
-    expect((service as any).getDeliveryInfo('epub', 2 * 1024 * 1024, { ...base, forceEnableHyphenation: true }, null).hash).toBe('90fb0bb55cca2fd2');
+    expect(
+      (service as any).getDeliveryInfo('epub', 2 * 1024 * 1024, { ...base, ...DEFAULT_KEPUBIFY_SETTINGS, forceEnableHyphenation: true }, null).hash,
+    ).toBe('90fb0bb55cca2fd2');
+  });
+
+  it('re-announces converted books when a kepubify option changes, and leaves the rest alone', () => {
+    const service = makeService(makeDb());
+    const base = { convertToKepub: true, ...DEFAULT_KEPUBIFY_SETTINGS, kepubConversionLimitMb: 1 };
+    const hash = (settings: object, format = 'epub', size = 1024) =>
+      (service as any).getDeliveryInfo(format, size, { ...base, ...settings }, null).hash;
+
+    const variants = [
+      { kepubCustomCss: 'p { margin: 0 }' },
+      { kepubCustomCss: 'p { margin: 1em }' },
+      { kepubFullscreenReadingFixes: true },
+      { kepubTitlePage: 'on' },
+      { kepubTitlePage: 'off' },
+      { kepubDetectCover: true },
+      { forceEnableHyphenation: true },
+    ].map((settings) => hash(settings));
+    expect(new Set([hash({}), ...variants]).size).toBe(variants.length + 1);
+
+    expect(hash({ kepubCustomCss: 'p { margin: 0 }' }, 'epub', 2 * 1024 * 1024)).toBe(hash({}, 'epub', 2 * 1024 * 1024));
+    expect(hash({ kepubCustomCss: 'p { margin: 0 }' }, 'pdf')).toBe(hash({}, 'pdf'));
+    expect(hash({ kepubCustomCss: 'p { margin: 0 }' }, 'kepub')).toBe(hash({}, 'kepub'));
+    expect(hash({ kepubCustomCss: 'p { margin: 0 }', convertToKepub: false })).toBe(hash({ convertToKepub: false }));
   });
 
   it('fetchEligibleSnapshotRows and fetchEligibleBooksByIds map DB rows into sync payload objects', async () => {
@@ -1611,6 +1655,7 @@ describe('KoboSyncService', () => {
       vi.spyOn(service as any, 'buildEligibleBooksWhereClause').mockResolvedValue({ where: true });
       vi.spyOn(service as any, 'getDeliverySettings').mockResolvedValue({
         convertToKepub: true,
+        ...DEFAULT_KEPUBIFY_SETTINGS,
         forceEnableHyphenation: false,
         kepubConversionLimitMb: 100,
       });

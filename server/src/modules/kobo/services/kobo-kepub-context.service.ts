@@ -6,6 +6,12 @@ import { KepubContext } from '../../position-converter/kobo-span-converter.servi
 import { BookReadService } from '../../book/book-read.service';
 import { KepubConversionService } from './kepub-conversion.service';
 import { KepubifyBinaryService } from './kepubify-binary.service';
+import { kepubifyOptionsFromDelivery, kepubifyOptionsFromSettings, kepubifyOptionsKey, type KepubifyOptions } from './kepubify-options';
+
+function optionsKeyField(options: KepubifyOptions): { optionsKey?: string } {
+  const optionsKey = kepubifyOptionsKey(options);
+  return optionsKey ? { optionsKey } : {};
+}
 import { KoboSettingsService, type KoboSettings } from './kobo-settings.service';
 
 export interface KepubReaderFile {
@@ -62,6 +68,7 @@ export class KoboKepubContextService {
         kepubPath: artifact.path,
         fileHash: artifact.sha256,
         hyphenate: record.options.hyphenate,
+        ...optionsKeyField(kepubifyOptionsFromDelivery(record.options.hyphenate, record.options.kepubify)),
         kepubifyVersion: record.options.converterVersion ?? 'native-kepub',
       };
       return { ok: true, file, settings, ctx, release: artifact.release };
@@ -120,6 +127,7 @@ export class KoboKepubContextService {
           kepubPath: artifact.path,
           fileHash: artifact.sha256,
           hyphenate: record.options.hyphenate,
+          ...optionsKeyField(kepubifyOptionsFromDelivery(record.options.hyphenate, record.options.kepubify)),
           kepubifyVersion: record.options.converterVersion ?? 'native-kepub',
         };
         return { ok: true, file, settings, ctx, release: artifact.release };
@@ -151,6 +159,7 @@ export class KoboKepubContextService {
       return { ok: false, reason: readiness, settings };
     }
 
+    const kepubifyOptions = kepubifyOptionsFromSettings(settings);
     let kepubPath: string;
     try {
       kepubPath = await this.kepubConversionService.getKepubPath({
@@ -158,7 +167,7 @@ export class KoboKepubContextService {
         fileHash: selected.fileHash,
         ...(prepared ? { audioless: prepared.actualVariant === 'audioless_epub', sourceRevision: prepared.sha256 } : {}),
         bookId,
-        hyphenate: settings.forceEnableHyphenation,
+        options: kepubifyOptions,
       });
     } catch {
       return { ok: false, reason: 'conversion_failed', settings };
@@ -171,7 +180,7 @@ export class KoboKepubContextService {
       ok: true,
       file,
       settings,
-      ctx: { kepubPath, fileHash: selected.fileHash, hyphenate: settings.forceEnableHyphenation, kepubifyVersion },
+      ctx: { kepubPath, fileHash: selected.fileHash, hyphenate: kepubifyOptions.hyphenate, ...optionsKeyField(kepubifyOptions), kepubifyVersion },
     };
   }
 
@@ -201,6 +210,7 @@ export class KoboKepubContextService {
       kepubPath: cached.path,
       fileHash: record.metadata.sha256,
       hyphenate: record.options.hyphenate,
+      ...optionsKeyField(kepubifyOptionsFromDelivery(record.options.hyphenate, record.options.kepubify)),
       kepubifyVersion: record.options.converterVersion ?? 'native-kepub',
     };
     return { ok: true, file, settings, ctx, release: cached.release };

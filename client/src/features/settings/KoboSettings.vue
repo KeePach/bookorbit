@@ -2,7 +2,7 @@
 import KoboReplacement from '@/features/delivery/components/KoboReplacement.vue'
 import ReadAloudDeliverySelect from '@/features/delivery/components/ReadAloudDeliverySelect.vue'
 import { useReadAloudDelivery } from '@/features/delivery/composables/useReadAloudDelivery'
-import type { ReadAloudDeliveryPreference } from '@bookorbit/types'
+import { KOBO_KEPUB_CUSTOM_CSS_MAX_LENGTH, type KoboKepubTitlePageMode, type ReadAloudDeliveryPreference } from '@bookorbit/types'
 import { Button } from '@/components/ui/button'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -53,6 +53,11 @@ const readingThreshold = ref(1)
 const finishedThreshold = ref(99)
 const convertToKepub = ref(true)
 const forceEnableHyphenation = ref(false)
+const CUSTOM_CSS_PLACEHOLDER = 'p { text-indent: 1.2em; margin: 0; }'
+const kepubCustomCss = ref('')
+const kepubFullscreenReadingFixes = ref(false)
+const kepubTitlePage = ref<KoboKepubTitlePageMode>('auto')
+const kepubDetectCover = ref(false)
 const kepubConversionLimitMb = ref(100)
 const twoWayProgressSync = ref(false)
 const syncBookOrbitAnnotationsToKobo = ref(false)
@@ -151,6 +156,10 @@ function applySettingsToLocal() {
   finishedThreshold.value = settings.value.finishedThreshold
   convertToKepub.value = settings.value.convertToKepub
   forceEnableHyphenation.value = settings.value.forceEnableHyphenation
+  kepubCustomCss.value = settings.value.kepubCustomCss
+  kepubFullscreenReadingFixes.value = settings.value.kepubFullscreenReadingFixes
+  kepubTitlePage.value = settings.value.kepubTitlePage
+  kepubDetectCover.value = settings.value.kepubDetectCover
   kepubConversionLimitMb.value = settings.value.kepubConversionLimitMb
   twoWayProgressSync.value = settings.value.twoWayProgressSync
   syncBookOrbitAnnotationsToKobo.value = settings.value.syncBookOrbitAnnotationsToKobo
@@ -682,6 +691,11 @@ async function saveSettings() {
     toast.error(settingsError.value ?? t('settings.reader.kobo.saveSettingsFailed'))
     return
   }
+  if (kepubCustomCss.value.includes('<')) {
+    settingsError.value = t('settings.reader.kobo.customCssInvalid')
+    toast.error(settingsError.value)
+    return
+  }
   savingSettings.value = true
   settingsError.value = null
   try {
@@ -690,6 +704,10 @@ async function saveSettings() {
       finishedThreshold: finishedThreshold.value,
       convertToKepub: convertToKepub.value,
       forceEnableHyphenation: forceEnableHyphenation.value,
+      kepubCustomCss: kepubCustomCss.value,
+      kepubFullscreenReadingFixes: kepubFullscreenReadingFixes.value,
+      kepubTitlePage: kepubTitlePage.value,
+      kepubDetectCover: kepubDetectCover.value,
       kepubConversionLimitMb: kepubConversionLimitMb.value,
       twoWayProgressSync: twoWayProgressSync.value,
       syncBookOrbitAnnotationsToKobo: syncBookOrbitAnnotationsToKobo.value,
@@ -1132,6 +1150,70 @@ function beginCreate() {
           </div>
           <ToggleSwitch v-model="forceEnableHyphenation" />
         </div>
+
+        <template v-if="convertToKepub">
+          <div class="flex items-center justify-between px-5 py-4 bg-card">
+            <div class="pr-8">
+              <p class="settings-label">
+                {{ t('settings.reader.kobo.fullscreenReadingFixes') }}
+              </p>
+              <p class="settings-hint">
+                {{ t('settings.reader.kobo.fullscreenReadingFixesHint') }}
+              </p>
+            </div>
+            <ToggleSwitch v-model="kepubFullscreenReadingFixes" />
+          </div>
+
+          <div class="flex items-center justify-between px-5 py-4 bg-card">
+            <div class="pr-8">
+              <p class="settings-label">
+                {{ t('settings.reader.kobo.detectCover') }}
+              </p>
+              <p class="settings-hint">
+                {{ t('settings.reader.kobo.detectCoverHint') }}
+              </p>
+            </div>
+            <ToggleSwitch v-model="kepubDetectCover" />
+          </div>
+
+          <div class="flex items-center justify-between gap-6 px-5 py-4 bg-card">
+            <div class="pr-8">
+              <label for="kobo-kepub-title-page" class="settings-label">
+                {{ t('settings.reader.kobo.titlePage') }}
+              </label>
+              <p class="settings-hint">
+                {{ t('settings.reader.kobo.titlePageHint') }}
+              </p>
+            </div>
+            <select id="kobo-kepub-title-page" v-model="kepubTitlePage" class="select-field w-40 shrink-0">
+              <option value="auto">{{ t('settings.reader.kobo.titlePageAuto') }}</option>
+              <option value="on">{{ t('settings.reader.kobo.titlePageOn') }}</option>
+              <option value="off">{{ t('settings.reader.kobo.titlePageOff') }}</option>
+            </select>
+          </div>
+
+          <div class="px-5 py-4 bg-card space-y-3">
+            <div>
+              <label for="kobo-kepub-custom-css" class="settings-label">
+                {{ t('settings.reader.kobo.customCss') }}
+              </label>
+              <p id="kobo-kepub-custom-css-hint" class="settings-hint">
+                {{ t('settings.reader.kobo.customCssHint') }}
+              </p>
+            </div>
+            <textarea
+              id="kobo-kepub-custom-css"
+              v-model="kepubCustomCss"
+              rows="6"
+              :maxlength="KOBO_KEPUB_CUSTOM_CSS_MAX_LENGTH"
+              spellcheck="false"
+              class="input-field w-full min-h-32 resize-y font-mono bg-background"
+              :placeholder="CUSTOM_CSS_PLACEHOLDER"
+              aria-describedby="kobo-kepub-custom-css-hint"
+            />
+            <p class="text-[12px] text-muted-foreground text-right font-mono">{{ kepubCustomCss.length }} / {{ KOBO_KEPUB_CUSTOM_CSS_MAX_LENGTH }}</p>
+          </div>
+        </template>
 
         <div class="flex items-center justify-between px-5 py-4 bg-card">
           <div class="pr-8">

@@ -27,6 +27,7 @@ export interface KepubContext {
   kepubPath: string;
   fileHash: string | null;
   hyphenate: boolean;
+  optionsKey?: string;
   kepubifyVersion: string;
 }
 
@@ -233,6 +234,7 @@ export class KoboSpanConverterService {
       const material = [
         ctx.fileHash ?? 'nohash',
         `hyph=${ctx.hyphenate}`,
+        ...(ctx.optionsKey ? [`opts=${ctx.optionsKey}`] : []),
         `size=${kepubStat.size}`,
         `mtime=${kepubStat.mtimeMs}`,
         `kepubify=${ctx.kepubifyVersion}`,

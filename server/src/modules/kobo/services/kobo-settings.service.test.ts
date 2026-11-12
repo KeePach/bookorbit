@@ -1,6 +1,7 @@
-import { InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
 
 import { KoboSettingsService } from './kobo-settings.service';
+import { DEFAULT_KEPUBIFY_SETTINGS } from './kepubify-options';
 
 function makeRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -8,6 +9,7 @@ function makeRow(overrides: Partial<Record<string, unknown>> = {}) {
     readingThreshold: 1,
     finishedThreshold: 99,
     convertToKepub: true,
+    ...DEFAULT_KEPUBIFY_SETTINGS,
     forceEnableHyphenation: false,
     kepubConversionLimitMb: 100,
     twoWayProgressSync: false,
@@ -62,6 +64,7 @@ describe('KoboSettingsService', () => {
       readingThreshold: 1,
       finishedThreshold: 99,
       convertToKepub: true,
+      ...DEFAULT_KEPUBIFY_SETTINGS,
       forceEnableHyphenation: false,
       kepubConversionLimitMb: 100,
       twoWayProgressSync: false,
@@ -80,6 +83,7 @@ describe('KoboSettingsService', () => {
       readingThreshold: 1,
       finishedThreshold: 99,
       convertToKepub: true,
+      ...DEFAULT_KEPUBIFY_SETTINGS,
       forceEnableHyphenation: false,
       kepubConversionLimitMb: 150,
       twoWayProgressSync: false,
@@ -98,6 +102,7 @@ describe('KoboSettingsService', () => {
       readingThreshold: 1,
       finishedThreshold: 99,
       convertToKepub: true,
+      ...DEFAULT_KEPUBIFY_SETTINGS,
       forceEnableHyphenation: false,
       kepubConversionLimitMb: 100,
       twoWayProgressSync: true,
@@ -123,6 +128,7 @@ describe('KoboSettingsService', () => {
       readingThreshold: 1,
       finishedThreshold: 99,
       convertToKepub: false,
+      ...DEFAULT_KEPUBIFY_SETTINGS,
       forceEnableHyphenation: false,
       kepubConversionLimitMb: 100,
       twoWayProgressSync: false,
@@ -131,6 +137,7 @@ describe('KoboSettingsService', () => {
     db.updateReturning.mockResolvedValue([
       makeRow({
         convertToKepub: true,
+        ...DEFAULT_KEPUBIFY_SETTINGS,
         forceEnableHyphenation: true,
         kepubConversionLimitMb: 200,
         twoWayProgressSync: true,
@@ -142,6 +149,7 @@ describe('KoboSettingsService', () => {
       readingThreshold: 1,
       finishedThreshold: 99,
       convertToKepub: true,
+      ...DEFAULT_KEPUBIFY_SETTINGS,
       forceEnableHyphenation: true,
       kepubConversionLimitMb: 200,
       twoWayProgressSync: true,
@@ -164,6 +172,7 @@ describe('KoboSettingsService', () => {
       readingThreshold: 1,
       finishedThreshold: 99,
       convertToKepub: true,
+      ...DEFAULT_KEPUBIFY_SETTINGS,
       forceEnableHyphenation: false,
       kepubConversionLimitMb: 100,
       twoWayProgressSync: false,
@@ -175,6 +184,7 @@ describe('KoboSettingsService', () => {
       readingThreshold: 5,
       finishedThreshold: 95,
       convertToKepub: true,
+      ...DEFAULT_KEPUBIFY_SETTINGS,
       forceEnableHyphenation: false,
       kepubConversionLimitMb: 100,
       twoWayProgressSync: false,
@@ -190,6 +200,7 @@ describe('KoboSettingsService', () => {
       readingThreshold: 1,
       finishedThreshold: 99,
       convertToKepub: true,
+      ...DEFAULT_KEPUBIFY_SETTINGS,
       forceEnableHyphenation: false,
       kepubConversionLimitMb: 100,
       twoWayProgressSync: false,
@@ -209,6 +220,7 @@ describe('KoboSettingsService', () => {
       readingThreshold: 1,
       finishedThreshold: 99,
       convertToKepub: false,
+      ...DEFAULT_KEPUBIFY_SETTINGS,
       forceEnableHyphenation: false,
       kepubConversionLimitMb: 100,
       twoWayProgressSync: false,
@@ -226,6 +238,7 @@ describe('KoboSettingsService', () => {
       readingThreshold: 1,
       finishedThreshold: 99,
       convertToKepub: false,
+      ...DEFAULT_KEPUBIFY_SETTINGS,
       forceEnableHyphenation: false,
       kepubConversionLimitMb: 100,
       twoWayProgressSync: false,
@@ -237,6 +250,76 @@ describe('KoboSettingsService', () => {
     );
     await expect(service.updateSettings(9, { readingThreshold: 99, finishedThreshold: 80 })).rejects.toThrow(
       'Reading threshold must be less than finished threshold',
+    );
+  });
+
+  describe('kepub conversion options', () => {
+    const current = (overrides: Partial<Record<string, unknown>> = {}) => ({
+      readingThreshold: 1,
+      finishedThreshold: 99,
+      convertToKepub: true,
+      ...DEFAULT_KEPUBIFY_SETTINGS,
+      kepubConversionLimitMb: 100,
+      twoWayProgressSync: false,
+      syncBookOrbitAnnotationsToKobo: false,
+      storeSync: false,
+      fullSizeCovers: true,
+      ...overrides,
+    });
+
+    function setup(existing: Record<string, unknown>, saved: Record<string, unknown>) {
+      const db = makeDb();
+      const service = new KoboSettingsService(db as never);
+      vi.spyOn(service, 'getSettings').mockResolvedValue(existing as never);
+      db.updateReturning.mockResolvedValue([makeRow(saved)]);
+      return { db, service };
+    }
+
+    it('stores and returns the options', async () => {
+      const patch = { kepubCustomCss: 'p { margin: 0 }', kepubFullscreenReadingFixes: true, kepubTitlePage: 'off' as const, kepubDetectCover: true };
+      const { db, service } = setup(current(), patch);
+
+      await expect(service.updateSettings(9, patch)).resolves.toMatchObject(patch);
+      expect(db.updateSet).toHaveBeenCalledWith(expect.objectContaining(patch));
+    });
+
+    it.each([
+      ['custom CSS', { kepubCustomCss: 'p { margin: 0 }' }],
+      ['fullscreen reading fixes', { kepubFullscreenReadingFixes: true }],
+      ['the title page mode', { kepubTitlePage: 'on' }],
+      ['cover detection', { kepubDetectCover: true }],
+    ])('marks Kobo books for re-delivery when %s changes', async (_name, patch) => {
+      const { db, service } = setup(current(), patch);
+
+      await service.updateSettings(9, patch);
+
+      expect(db.execute).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not re-deliver when only whitespace around the CSS changes', async () => {
+      const { db, service } = setup(current({ kepubCustomCss: 'p { margin: 0 }' }), { kepubCustomCss: ' p { margin: 0 } ' });
+
+      await service.updateSettings(9, { kepubCustomCss: ' p { margin: 0 } ' });
+
+      expect(db.execute).not.toHaveBeenCalled();
+    });
+
+    it('does not re-deliver for an option change while conversion is off', async () => {
+      const { db, service } = setup(current({ convertToKepub: false }), { convertToKepub: false, kepubDetectCover: true });
+
+      await service.updateSettings(9, { kepubDetectCover: true });
+
+      expect(db.execute).not.toHaveBeenCalled();
+    });
+
+    it.each(['</style><script>alert(1)</script>', 'a'.repeat(10_001)])(
+      'rejects CSS that could break out of the style element or is too long',
+      async (css) => {
+        const { db, service } = setup(current(), {});
+
+        await expect(service.updateSettings(9, { kepubCustomCss: css })).rejects.toBeInstanceOf(BadRequestException);
+        expect(db.update).not.toHaveBeenCalled();
+      },
     );
   });
 });

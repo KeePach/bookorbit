@@ -16,6 +16,7 @@ import { KepubConversionService } from './kepub-conversion.service';
 import { KoboSettingsService } from './kobo-settings.service';
 import { KoboDownloadHashRegistrationService } from './kobo-download-hash-registration.service';
 import { KoboDownloadService } from './kobo-download.service';
+import { DEFAULT_KEPUBIFY_OPTIONS, DEFAULT_KEPUBIFY_SETTINGS } from './kepubify-options';
 
 const DELIVERED_HASH = 'a'.repeat(32);
 const ORIGINAL_HASH = 'b'.repeat(32);
@@ -44,7 +45,11 @@ function makeDeps() {
       registerDeliveredHash: vi.fn().mockResolvedValue(undefined),
     },
     conversion: { getKepubPath: vi.fn().mockResolvedValue(CONVERTED) },
-    settings: { getSettings: vi.fn().mockResolvedValue({ convertToKepub: true, forceEnableHyphenation: false, kepubConversionLimitMb: 10 }) },
+    settings: {
+      getSettings: vi
+        .fn()
+        .mockResolvedValue({ convertToKepub: true, ...DEFAULT_KEPUBIFY_SETTINGS, forceEnableHyphenation: false, kepubConversionLimitMb: 10 }),
+    },
     access: { assertBookAccessible: vi.fn().mockResolvedValue(undefined) },
     audioless: { writeArchive: vi.fn().mockResolvedValue({ removedEntries: 9, sanitizedEntries: 9 }) },
   };
@@ -142,7 +147,12 @@ describe('KoboDownloadService', () => {
     { name: 'conversion disabled', settings: { convertToKepub: false }, size: 1024 },
     { name: 'over size limit', settings: { convertToKepub: true }, size: 11 * 1024 * 1024 },
   ])('registers an original EPUB when $name', async ({ settings, size }) => {
-    deps.settings.getSettings.mockResolvedValue({ forceEnableHyphenation: false, kepubConversionLimitMb: 10, ...settings });
+    deps.settings.getSettings.mockResolvedValue({
+      ...DEFAULT_KEPUBIFY_SETTINGS,
+      forceEnableHyphenation: false,
+      kepubConversionLimitMb: 10,
+      ...settings,
+    });
     setFile({ sizeBytes: size });
     await service.streamBook(7, 11, reply as never);
     expect(deps.conversion.getKepubPath).not.toHaveBeenCalled();
@@ -158,16 +168,39 @@ describe('KoboDownloadService', () => {
   });
 
   it('passes original source identity and hyphenation to conversion but registers the resulting identity', async () => {
-    deps.settings.getSettings.mockResolvedValue({ convertToKepub: true, forceEnableHyphenation: true, kepubConversionLimitMb: 10 });
+    deps.settings.getSettings.mockResolvedValue({
+      convertToKepub: true,
+      ...DEFAULT_KEPUBIFY_SETTINGS,
+      forceEnableHyphenation: true,
+      kepubConversionLimitMb: 10,
+    });
     await service.streamBook(7, 11, reply as never);
     expect(deps.conversion.getKepubPath).toHaveBeenCalledWith({
       sourcePath: SOURCE,
       fileHash: ORIGINAL_HASH,
       bookId: 11,
-      hyphenate: true,
+      options: { ...DEFAULT_KEPUBIFY_OPTIONS, hyphenate: true },
       audioless: false,
     });
     expect(deps.repository.registerDeliveredHash).not.toHaveBeenCalledWith(22, ORIGINAL_HASH);
+  });
+
+  it('passes the stored kepubify options to conversion', async () => {
+    deps.settings.getSettings.mockResolvedValue({
+      convertToKepub: true,
+      ...DEFAULT_KEPUBIFY_SETTINGS,
+      kepubCustomCss: 'p { margin: 0 }',
+      kepubFullscreenReadingFixes: true,
+      kepubTitlePage: 'off',
+      kepubDetectCover: true,
+      kepubConversionLimitMb: 10,
+    });
+    await service.streamBook(7, 11, reply as never);
+    expect(deps.conversion.getKepubPath).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: { hyphenate: false, css: 'p { margin: 0 }', fullscreenReadingFixes: true, titlePage: 'off', detectCover: true },
+      }),
+    );
   });
 
   it('registers each cached delivery, including a different authorized user', async () => {
@@ -201,7 +234,12 @@ describe('KoboDownloadService', () => {
     { name: 'conversion fails', enabled: true, oversized: false, failed: true, path: STRIPPED },
   ])('registers the final narration-free file when $name', async ({ enabled, oversized, failed, path }) => {
     setFile({ mediaOverlayAvailable: true, sizeBytes: 1500 * 1024 * 1024 });
-    deps.settings.getSettings.mockResolvedValue({ convertToKepub: enabled, forceEnableHyphenation: false, kepubConversionLimitMb: 10 });
+    deps.settings.getSettings.mockResolvedValue({
+      convertToKepub: enabled,
+      ...DEFAULT_KEPUBIFY_SETTINGS,
+      forceEnableHyphenation: false,
+      kepubConversionLimitMb: 10,
+    });
     statMock.mockResolvedValueOnce({ size: (oversized ? 11 : 2) * 1024 * 1024 } as never);
     if (failed) deps.conversion.getKepubPath.mockRejectedValue(new Error('Conversion failed'));
     await service.streamBook(7, 11, reply as never);
@@ -218,7 +256,12 @@ describe('KoboDownloadService', () => {
 
   it.each([false, true])('falls back safely when narration stripping fails (conversion=%s)', async (convertToKepub) => {
     setFile({ mediaOverlayAvailable: true });
-    deps.settings.getSettings.mockResolvedValue({ convertToKepub, forceEnableHyphenation: false, kepubConversionLimitMb: 10 });
+    deps.settings.getSettings.mockResolvedValue({
+      convertToKepub,
+      ...DEFAULT_KEPUBIFY_SETTINGS,
+      forceEnableHyphenation: false,
+      kepubConversionLimitMb: 10,
+    });
     deps.audioless.writeArchive.mockRejectedValue(new Error('Invalid archive'));
     await service.streamBook(7, 11, reply as never);
     expect(rm).toHaveBeenCalledExactlyOnceWith(TEMP_DIR, { recursive: true, force: true });
