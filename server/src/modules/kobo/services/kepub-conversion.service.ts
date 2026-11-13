@@ -10,6 +10,7 @@ import type { ConfigType } from '@nestjs/config';
 
 import { storageConfig } from '../../../config/config';
 
+import { keepCoverAspectRatio } from './kepub-cover-aspect';
 import { KepubifyBinaryService } from './kepubify-binary.service';
 import { kepubifyArgs, kepubifyOptionsKey, type KepubifyOptions } from './kepubify-options';
 
@@ -168,6 +169,7 @@ export class KepubConversionService {
       const outputPath = join(tempDir, 'book.kepub.epub');
       try {
         await this.runKepubify(binaryPath, input.sourcePath, outputPath, input.options);
+        await this.keepCoverAspect(outputPath, input.bookId);
         // Readers and the cache recovery pass must never see a partially written conversion.
         const publication = this.publication.then(async () => {
           if (input.sourceRevision) await this.evict(cachedPath, (await stat(outputPath)).size);
@@ -185,6 +187,20 @@ export class KepubConversionService {
       else this.active--;
     }
   }
+  /**
+   * Fits stretched full-page SVG covers inside the converted copy only; the source book is never
+   * touched. A failure here keeps the plain conversion rather than losing the book.
+   */
+  private async keepCoverAspect(kepubPath: string, bookId: number): Promise<void> {
+    try {
+      if (await keepCoverAspectRatio(kepubPath)) this.logger.debug(`[kepub.cover_aspect] bookId=${bookId} - fitted a stretched cover`);
+    } catch (error) {
+      this.logger.warn(
+        `[kepub.cover_aspect] bookId=${bookId} - left the cover as converted: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   private async runKepubify(binaryPath: string, sourcePath: string, outputPath: string, options: KepubifyOptions): Promise<void> {
     await execFileAsync(binaryPath, [...kepubifyArgs(options), '--output', outputPath, sourcePath], { timeout: KEPUBIFY_TIMEOUT_MS });
   }
