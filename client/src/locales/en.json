@@ -3726,7 +3726,18 @@
         "retireDeviceFailed": "Failed to retire device",
         "restoreDeviceFailed": "Failed to restore device",
         "retiredDevices": "{count, plural, one {# retired device} other {# retired devices}}",
-        "retiredOnLabel": "Retired"
+        "retiredOnLabel": "Retired",
+        "renameDevice": {
+          "action": "Rename",
+          "actionLabel": "Rename {device}",
+          "title": "Rename device",
+          "description": "BookOrbit shows this name in place of the model the device reports, here and in the BookOrbit plugin on your other devices. Leave it empty to show the model again.",
+          "nameLabel": "Name",
+          "modelHint": "Reported model: {model}",
+          "saved": "Device renamed",
+          "cleared": "Device name removed",
+          "failed": "Failed to rename device"
+        }
       },
       "opds": {
         "title": "OPDS",
@@ -3863,7 +3874,9 @@
           "passwordBrief": "Stored encrypted.",
           "apiKeyBrief": "Found in SABnzbd under Config > General. Stored encrypted.",
           "torboxApiKeyBrief": "Can be found at https://torbox.app/settings?section=account. Stored encrypted.",
-          "useHardlinksBrief": "Imports without using the disk twice. Falls back to a copy across filesystems."
+          "useHardlinksBrief": "Imports without using the disk twice. Falls back to a copy across filesystems.",
+          "removeCompletedDownloads": "Remove completed downloads",
+          "removeCompletedDownloadsBrief": "Deletes the download and its files from the client once the book is imported."
         },
         "mappings": {
           "title": "Path mappings",
@@ -3918,7 +3931,8 @@
           "urlRequired": "Enter the address BookOrbit should reach this client at.",
           "mappingRequired": "Add at least one path mapping, so BookOrbit knows which directory it may import from.",
           "apiKeyRequired": "Enter the SABnzbd API key from Config > General.",
-          "torboxApiKeyRequired": "Enter the TorBox API key from the TorBox account settings."
+          "torboxApiKeyRequired": "Enter the TorBox API key from the TorBox account settings.",
+          "removeCompletedUnsupported": "Only Usenet clients can remove completed downloads. Torrent clients keep them for seeding."
         },
         "encryptionKeyMissing": "BOOK_REQUEST_ENCRYPTION_KEY is not set, so a client credential cannot be saved. Generate one with: openssl rand -hex 32",
         "confirmDelete": {
@@ -5280,6 +5294,7 @@
       "whereFrom": "Where they came from",
       "theShelf": "The shelf",
       "devices": "Devices",
+      "deviceWithSource": "{source} · {device}",
       "allBooks": "All {count} books",
       "behindCount": "{count, plural, one {# behind} other {# behind}}",
       "busiestWeek": "Busiest week",
@@ -7096,6 +7111,29 @@
         "pageCountLabel": "Page Count",
         "isbn13Label": "ISBN-13",
         "isbn10Label": "ISBN-10",
+        "isbnCandidates": {
+          "trigger": "Find in book",
+          "triggerLabel": "Find the ISBNs printed in this book",
+          "heading": "ISBNs printed in this book",
+          "description": "Read from the first and last pages. Books often list every edition and other titles, so choose the one that matches this file.",
+          "loading": "Reading the book…",
+          "current": "Current",
+          "isbn10": "ISBN-10 {isbn}",
+          "status": {
+            "failed": "The book could not be read. Try again.",
+            "unreadable": "This file's text cannot be searched for ISBNs.",
+            "empty": "No ISBN is printed in this book.",
+            "currentFound": "The current ISBN is printed in this book.",
+            "currentMissing": "The current ISBN is not printed in this book."
+          },
+          "editions": {
+            "ebook": "eBook",
+            "hardcover": "Hardcover",
+            "paperback": "Paperback",
+            "print": "Print",
+            "audio": "Audio"
+          }
+        },
         "durationLabel": "Duration (s)",
         "abridgedLabel": "Abridged",
         "providerIds": "Provider IDs",
@@ -8472,6 +8510,7 @@
           "colReached": "Reached",
           "colSource": "Source",
           "colFormat": "Format",
+          "sourceWithDevice": "{source} · {device}",
           "gapDays": "{count, plural, one {# day without reading} other {# days without reading}}",
           "attemptBegan": "Attempt {index} began",
           "attemptOutsideAny": "Outside any attempt",
