@@ -1023,6 +1023,13 @@
       "when": 1794470000000,
       "tag": "0145_add_kepubify_options",
       "breakpoints": true
+    },
+    {
+      "idx": 146,
+      "version": "7",
+      "when": 1794480000000,
+      "tag": "0146_add_series_releases",
+      "breakpoints": true
     }
   ]
 }

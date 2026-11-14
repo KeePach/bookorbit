@@ -13990,6 +13990,82 @@
     "filesProgress": "{processed}/{total} files",
     "booksFound": "{count, plural, =0 {no books found} one {# book found} other {# books found}}"
   },
+  "seriesReleases": {
+    "title": "Upcoming volumes",
+    "checked": "Last checked for a date on {date}",
+    "neverChecked": "Not checked for a date yet",
+    "untrackedHint": "Add the next volume's date, store link and cover by hand. It stays here until you have it.",
+    "checkDue": "It has been a while since anyone looked for a release date. Time to check.",
+    "noVolumes": "No upcoming volume is listed. Add the next one when it is announced.",
+    "finishedNote": "No more volumes are expected for this series.",
+    "actions": {
+      "add": "Add volume",
+      "track": "Track upcoming volumes",
+      "checkedToday": "Checked today",
+      "noMore": "No more volumes",
+      "moreExpected": "More volumes expected",
+      "stop": "Stop tracking",
+      "importBackup": "Import backup"
+    },
+    "status": {
+      "undated": "No date yet",
+      "overdue": "Date passed",
+      "today": "Today",
+      "inDays": "{count, plural, one {Tomorrow} other {In # days}}"
+    },
+    "card": {
+      "edit": "Edit {volume}",
+      "store": "Store page"
+    },
+    "dialog": {
+      "addTitle": "Add upcoming volume",
+      "editTitle": "Edit upcoming volume",
+      "description": "A volume that is not in the library yet. Only the volume is required.",
+      "volume": "Volume",
+      "volumePlaceholder": "6, Vol. 6, Omnibus 2",
+      "releaseDate": "Release date",
+      "releaseDateHint": "Leave empty until a date is announced.",
+      "storeUrl": "Store link",
+      "note": "Note",
+      "notePlaceholder": "Pre-order, limited edition, …",
+      "cover": "Cover",
+      "coverLink": "Cover link (https)",
+      "coverUpload": "Upload image",
+      "coverRemove": "Remove",
+      "coverHint": "An uploaded image is shrunk and stored with the volume.",
+      "coverReadFailed": "That file could not be read as an image.",
+      "delete": "Delete",
+      "collect": "Got it",
+      "saving": "Saving…"
+    },
+    "confirmStop": {
+      "title": "Stop tracking this series?",
+      "description": "Its upcoming volumes are removed. Volumes you already marked as collected are kept.",
+      "confirm": "Stop tracking"
+    },
+    "toast": {
+      "collected": "{volume} collected.",
+      "collectedNext": "{volume} collected. {next} added with no date yet."
+    },
+    "import": {
+      "done": "{imported, plural, one {# entry} other {# entries}} imported, {skipped} skipped.",
+      "skippedHint": "Skipped entries had no matching series you can edit, no volume, or were already listed.",
+      "errors": {
+        "not-json": "That file is not valid JSON.",
+        "not-a-backup": "That file is not a release backup.",
+        "empty": "That backup has no entries."
+      }
+    },
+    "errors": {
+      "load": "Could not load the upcoming volumes.",
+      "save": "Could not save the volume.",
+      "remove": "Could not delete the volume.",
+      "collect": "Could not mark the volume as collected.",
+      "tracking": "Could not change tracking for this series.",
+      "import": "Could not import the backup.",
+      "duplicate": "This volume is already listed as upcoming."
+    }
+  },
   "series": {
     "completion": {
       "readOfTotal": "{read} of {total} read ({percentage}%)"

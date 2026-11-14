@@ -80,6 +80,7 @@ import { AuditModule } from './modules/audit/audit.module';
 import { MigrationModule } from './modules/migration/migration.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { SeriesModule } from './modules/series/series.module';
+import { SeriesReleaseModule } from './modules/series-release/series-release.module';
 import { EntityManagerModule } from './modules/entity-manager/entity-manager.module';
 import { FontModule } from './modules/font/font.module';
 import { ServerFontModule } from './modules/server-font/server-font.module';
@@ -204,6 +205,7 @@ import { StoryEditsModule } from './modules/story-edits/story-edits.module';
     MigrationModule,
     NotificationModule,
     SeriesModule,
+    SeriesReleaseModule,
     EntityManagerModule,
     FontModule,
     ServerFontModule,

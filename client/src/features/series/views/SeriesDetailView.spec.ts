@@ -267,6 +267,7 @@ function mountView() {
         EntityNotFound: true,
         SeriesCompletionBar: true,
         SeriesGapBanner: true,
+        SeriesUpcomingSection: true,
       },
     },
   })

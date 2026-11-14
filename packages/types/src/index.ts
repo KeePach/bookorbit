@@ -104,3 +104,4 @@ export * from "./regex-metadata";
 export * from "./delivery";
 export * from "./djvu";
 export * from "./email";
+export * from "./series-release";
