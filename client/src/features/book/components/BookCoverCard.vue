@@ -3,6 +3,7 @@ import type { BookCard, BookFileRef, ConcreteBookMediaKind, CoverAspectRatio } f
 import { getBookMediaKind, getBookMediaProfile, isAudioFormat, READER_OPENABLE_FORMATS } from '@bookorbit/types'
 import BookCardFormatBadges from './BookCardFormatBadges.vue'
 import SeriesReleaseBadge from '@/features/series-releases/components/SeriesReleaseBadge.vue'
+import SeriesReleaseFrame from '@/features/series-releases/components/SeriesReleaseFrame.vue'
 import BookCardFormatList from './BookCardFormatList.vue'
 import { bookFormatEntries, fileFormatKey, formatKeyName } from '../lib/book-formats'
 import { cardMediaView } from '../lib/card-media'
@@ -459,6 +460,11 @@ const secondaryLabelText = computed(() => resolveBookLabel(gridCardSecondaryLabe
       >
         <!-- Missing border overlay: mirror selected overlay pattern so border is never clipped/hidden -->
         <div v-if="isMissing" class="absolute inset-0 z-30 pointer-events-none rounded-sm ring-2 ring-inset ring-amber-500" />
+
+        <SeriesReleaseFrame
+          v-if="!isMissing"
+          :series-ids="[book.seriesId, ...(book.seriesMemberships ?? []).map((membership) => membership.seriesId)]"
+        />
 
         <BookCoverArtwork
           :src="coverSrc"

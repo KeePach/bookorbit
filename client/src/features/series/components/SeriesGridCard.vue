@@ -9,6 +9,7 @@ import BookCoverArtwork from '@/features/book/components/BookCoverArtwork.vue'
 import SeriesVolumeTrack from './SeriesVolumeTrack.vue'
 import SeriesLibraryChip from './SeriesLibraryChip.vue'
 import SeriesReleaseBadge from '@/features/series-releases/components/SeriesReleaseBadge.vue'
+import SeriesReleaseFrame from '@/features/series-releases/components/SeriesReleaseFrame.vue'
 import { seriesAuthorLine, seriesExtraAuthorCount, seriesRowFacts, seriesCoverSlots } from '../lib/series-summary'
 import { STACK_MAX_VISIBLE, coverStackLayout, orderForStack } from '../lib/cover-stack-layout'
 
@@ -77,6 +78,8 @@ function handleOpen() {
     >
       <div class="cover-stack relative isolate w-full" style="aspect-ratio: 5 / 4">
         <span class="absolute inset-x-[22%] bottom-[3%] h-3 rounded-full bg-black/25 blur-xl" aria-hidden="true" />
+
+        <SeriesReleaseFrame :series-id="series.id" />
 
         <div
           v-for="(slot, i) in stackSlots"

@@ -5,6 +5,7 @@ import { getBookMediaProfile, type BookCard, type CoverAspectRatio } from '@book
 import { Library } from '@lucide/vue'
 import BookCoverArtwork from './BookCoverArtwork.vue'
 import SeriesReleaseBadge from '@/features/series-releases/components/SeriesReleaseBadge.vue'
+import SeriesReleaseFrame from '@/features/series-releases/components/SeriesReleaseFrame.vue'
 import BookCoverPlaceholder from './BookCoverPlaceholder.vue'
 import BookCoverSurface from './BookCoverSurface.vue'
 import { COVER_ASPECT_RATIO_KEY, DEFAULT_COVER_ASPECT_RATIO, coverAspectRatioValue, fittedCoverFrameStyle } from '../lib/cover-aspect-ratio'
@@ -373,6 +374,8 @@ const secondaryLabelText = computed(() => resolveSeriesLabel(gridCardSecondaryLa
             <div class="h-full bg-primary" :style="{ width: `${progressPercent}%` }" data-testid="series-progress-fill" />
           </div>
         </div>
+
+        <SeriesReleaseFrame :series-ids="releaseSeriesIds" />
       </BookCoverSurface>
     </div>
 

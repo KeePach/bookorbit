@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { CalendarClock } from '@lucide/vue'
 import { formatDate } from '@/i18n/formatters'
-import { useReleaseOverview } from '../composables/useReleaseOverview'
-import { daysUntil, parseLocalDay, seriesBadge } from '../lib/release-state'
+import { useTrackedRelease } from '../composables/useTrackedRelease'
+import { daysUntil, parseLocalDay } from '../lib/release-state'
 
 const props = withDefaults(
   defineProps<{
@@ -21,25 +21,11 @@ const props = withDefaults(
 )
 
 const { t } = useI18n()
-const { bySeries, ensure } = useReleaseOverview()
 
-onMounted(() => void ensure())
-
-const tracked = computed(() => {
-  const ids = [...new Set([props.seriesId, ...(props.seriesIds ?? [])])].filter((id): id is number => id != null)
-  const entries = ids.flatMap((id) => bySeries.value.get(id) ?? [])
-  if (entries.length === 0) return undefined
-  const nearest = (entry: (typeof entries)[number]) => entry.releases[0]?.releaseDate ?? '9999-99-99'
-  return entries.reduce((best, entry) => (nearest(entry) < nearest(best) ? entry : best))
-})
-
-const badge = computed(() => (tracked.value ? seriesBadge(tracked.value, props.now) : null))
-
-/** The check reminder outranks a quiet "no date"; a real date outranks both. */
-const kind = computed(() => {
-  if (!badge.value) return null
-  return badge.value.state === 'undated' && badge.value.checkDue ? 'check' : badge.value.state
-})
+const { badge, kind } = useTrackedRelease(
+  () => [props.seriesId, ...(props.seriesIds ?? [])],
+  () => props.now,
+)
 
 const label = computed(() => {
   const value = badge.value
