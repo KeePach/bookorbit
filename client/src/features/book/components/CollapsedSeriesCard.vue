@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { getBookMediaProfile, type BookCard, type CoverAspectRatio } from '@bookorbit/types'
 import { Library } from '@lucide/vue'
 import BookCoverArtwork from './BookCoverArtwork.vue'
+import SeriesReleaseBadge from '@/features/series-releases/components/SeriesReleaseBadge.vue'
 import BookCoverPlaceholder from './BookCoverPlaceholder.vue'
 import BookCoverSurface from './BookCoverSurface.vue'
 import { COVER_ASPECT_RATIO_KEY, DEFAULT_COVER_ASPECT_RATIO, coverAspectRatioValue, fittedCoverFrameStyle } from '../lib/cover-aspect-ratio'
@@ -30,6 +31,9 @@ const { coverUrl } = useCoverVersions()
 const { seriesCardCoverMode, bookCoverDisplayMode, gridCardPrimaryLabel, gridCardSecondaryLabel, cardInfoMode, cardOverlays } = useDisplaySettings()
 
 const collapsed = computed(() => props.book.collapsedSeries!)
+
+/** The stack stands for a whole series, so the release pill looks it up by every series the representative belongs to. */
+const releaseSeriesIds = computed(() => [props.book.seriesId, ...(props.book.seriesMemberships ?? []).map((membership) => membership.seriesId)])
 const seriesName = computed(() => props.book.seriesName ?? '')
 const authorLine = computed(() => props.book.authors.join(', ') || null)
 const authorQuery = computed(() => props.book.authors[0] ?? null)
@@ -249,6 +253,11 @@ const secondaryLabelText = computed(() => resolveSeriesLabel(gridCardSecondaryLa
               >
                 {{ collapsed.bookCount }}
               </div>
+              <SeriesReleaseBadge
+                :series-ids="releaseSeriesIds"
+                variant="overlay"
+                class="absolute right-1.5 top-8 z-20 group-hover:opacity-0 transition-opacity duration-150"
+              />
             </template>
           </div>
           <div
@@ -321,6 +330,11 @@ const secondaryLabelText = computed(() => resolveSeriesLabel(gridCardSecondaryLa
           >
             {{ collapsed.bookCount }}
           </div>
+          <SeriesReleaseBadge
+            :series-ids="releaseSeriesIds"
+            variant="overlay"
+            class="absolute right-1.5 top-8 z-10 group-hover:opacity-0 transition-opacity duration-150"
+          />
 
           <!-- Series type badge -->
           <div
