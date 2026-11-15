@@ -9,7 +9,9 @@ import { daysUntil, parseLocalDay, seriesBadge } from '../lib/release-state'
 const props = withDefaults(
   defineProps<{
     /** Null or undefined for a book that belongs to no series: nothing renders. */
-    seriesId: number | null | undefined
+    seriesId?: number | null
+    /** A book can sit in several series; the badge shows the tracked one with the nearest date. */
+    seriesIds?: (number | null | undefined)[]
     /** `chip` sits in a card's text rows; `overlay` matches the dark pills on a book cover. */
     variant?: 'chip' | 'overlay'
     /** Today, for tests; the real clock otherwise. */
@@ -23,10 +25,15 @@ const { bySeries, ensure } = useReleaseOverview()
 
 onMounted(() => void ensure())
 
-const badge = computed(() => {
-  const series = props.seriesId != null ? bySeries.value.get(props.seriesId) : undefined
-  return series ? seriesBadge(series, props.now) : null
+const tracked = computed(() => {
+  const ids = [...new Set([props.seriesId, ...(props.seriesIds ?? [])])].filter((id): id is number => id != null)
+  const entries = ids.flatMap((id) => bySeries.value.get(id) ?? [])
+  if (entries.length === 0) return undefined
+  const nearest = (entry: (typeof entries)[number]) => entry.releases[0]?.releaseDate ?? '9999-99-99'
+  return entries.reduce((best, entry) => (nearest(entry) < nearest(best) ? entry : best))
 })
+
+const badge = computed(() => (tracked.value ? seriesBadge(tracked.value, props.now) : null))
 
 /** The check reminder outranks a quiet "no date"; a real date outranks both. */
 const kind = computed(() => {

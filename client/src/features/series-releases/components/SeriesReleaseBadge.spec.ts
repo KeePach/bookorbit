@@ -62,6 +62,30 @@ describe('SeriesReleaseBadge', () => {
     expect(none.find('[data-testid="series-release-badge"]').exists()).toBe(false)
   })
 
+  it('finds the series through memberships when the legacy series id is empty', async () => {
+    apiMock.mockResolvedValue(json(overview('2026-12-19')))
+    const wrapper = mount(SeriesReleaseBadge, { props: { seriesIds: [null, 3], now: NOW } })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Dec 19')
+  })
+
+  it('shows the tracked series with the nearest date when a book sits in several', async () => {
+    const body = overview('2026-12-19')
+    body.series.push({
+      seriesId: 4,
+      name: 'Other',
+      finished: false,
+      checkedAt: '2026-11-10',
+      releases: [{ id: 9, volume: '2', releaseDate: '2026-11-20', storeUrl: null, note: null }],
+    })
+    apiMock.mockResolvedValue(json(body))
+    const wrapper = mount(SeriesReleaseBadge, { props: { seriesIds: [3, 4], now: NOW } })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('6d')
+  })
+
   it('draws the overlay variant as a dark cover pill', async () => {
     apiMock.mockResolvedValue(json(overview('2026-11-14')))
     const wrapper = mount(SeriesReleaseBadge, { props: { seriesId: 3, now: NOW, variant: 'overlay' } })

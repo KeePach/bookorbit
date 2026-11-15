@@ -516,7 +516,10 @@ const secondaryLabelText = computed(() => resolveBookLabel(gridCardSecondaryLabe
               </TooltipContent>
             </Tooltip>
 
-            <SeriesReleaseBadge :series-id="book.seriesId" variant="overlay" />
+            <SeriesReleaseBadge
+              :series-ids="[book.seriesId, ...(book.seriesMemberships ?? []).map((membership) => membership.seriesId)]"
+              variant="overlay"
+            />
           </div>
 
           <!-- Bottom-left overlay: rating -->
