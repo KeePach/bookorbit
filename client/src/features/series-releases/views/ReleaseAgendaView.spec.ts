@@ -86,6 +86,19 @@ describe('ReleaseAgendaView', () => {
     expect(wrapper.text()).toContain('Check')
   })
 
+  it('lists a tracked series with nothing listed yet as waiting, but not a finished one', async () => {
+    const body = overview()
+    body.series.push(
+      { seriesId: 8, name: 'Auto Tracked', finished: false, checkedAt: '2026-11-15', releases: [] },
+      { seriesId: 9, name: 'All Done', finished: true, checkedAt: '2026-11-15', releases: [] },
+    )
+    const wrapper = await mountView(body)
+
+    expect(wrapper.text()).toContain('Auto Tracked')
+    expect(wrapper.text()).toContain('No volume listed yet')
+    expect(wrapper.text()).not.toContain('All Done')
+  })
+
   it('offers the calendar link and copies it as an absolute address', async () => {
     copyMock.mockResolvedValue(true)
     const wrapper = await mountView()

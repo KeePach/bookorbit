@@ -127,6 +127,26 @@ describe('SeriesReleaseNotifierService', () => {
     expect(repo.setCheckNotified).toHaveBeenCalledWith([5], '2026-11-14');
   });
 
+  it('sums up many due checks in one library as a single notification', async () => {
+    const { service, repo, notifications } = makeService();
+    const due = [1, 2, 3, 4, 5].map((seriesId) => ({ seriesId, seriesName: `Series ${seriesId}` }));
+    repo.listCheckDueForNotification.mockResolvedValue(due);
+    repo.listLibrariesForSeries.mockResolvedValue(due.map(({ seriesId }) => ({ seriesId, libraryId: 2 })));
+
+    await service.runDaily(NOW);
+
+    expect(notifications.notify).toHaveBeenCalledTimes(1);
+    expect(notifications.notify).toHaveBeenCalledWith({
+      type: NotificationType.SeriesReleaseCheckDue,
+      title: 'Release checks due',
+      message: '5 tracked series have no release date and have not been checked in over a month.',
+      actionUrl: '/releases',
+      meta: { count: 5 },
+      scope: { kind: 'library', libraryId: 2 },
+    });
+    expect(repo.setCheckNotified).toHaveBeenCalledWith([1, 2, 3, 4, 5], '2026-11-14');
+  });
+
   it('does nothing when nothing is due', async () => {
     const { service, repo, notifications } = makeService();
 

@@ -9,6 +9,8 @@ import { todayIso } from './series-release.validation';
 /** Mirror of the client's release-state windows (SOON_DAYS / CHECK_EVERY_DAYS). */
 export const RELEASE_SOON_DAYS = 14;
 export const RELEASE_CHECK_EVERY_DAYS = 30;
+/** More check-due series than this in one library on one day become a single summary notification. */
+export const CHECK_DIGEST_THRESHOLD = 3;
 
 function addDaysIso(day: string, days: number): string {
   const [year, month, dayOfMonth] = day.split('-').map(Number);
@@ -99,8 +101,25 @@ export class SeriesReleaseNotifierService {
     const bySeries = new Map<number, number[]>();
     for (const { seriesId, libraryId } of libraries) bySeries.set(seriesId, [...(bySeries.get(seriesId) ?? []), libraryId]);
 
+    // Group by library: a handful get their own reminder, a crowd (say, everything that was
+    // auto-tracked by the licensing check on the same day) gets one summary pointing at the agenda.
+    const byLibrary = new Map<number, typeof series>();
     for (const row of series) {
-      for (const libraryId of bySeries.get(row.seriesId) ?? []) {
+      for (const libraryId of bySeries.get(row.seriesId) ?? []) byLibrary.set(libraryId, [...(byLibrary.get(libraryId) ?? []), row]);
+    }
+    for (const [libraryId, rows] of byLibrary) {
+      if (rows.length > CHECK_DIGEST_THRESHOLD) {
+        await this.notifications.notify({
+          type: NotificationType.SeriesReleaseCheckDue,
+          title: 'Release checks due',
+          message: `${rows.length} tracked series have no release date and have not been checked in over a month.`,
+          actionUrl: '/releases',
+          meta: { count: rows.length },
+          scope: { kind: 'library', libraryId },
+        });
+        continue;
+      }
+      for (const row of rows) {
         await this.notifications.notify({
           type: NotificationType.SeriesReleaseCheckDue,
           title: 'Release check due',

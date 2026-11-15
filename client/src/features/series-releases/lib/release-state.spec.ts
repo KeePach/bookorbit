@@ -50,7 +50,8 @@ describe('isCheckDue', () => {
   it('is not due right after a check, or when every date is known', () => {
     expect(isCheckDue({ ...tracked, checkedAt: '2026-11-10' }, [{ releaseDate: null }], NOW)).toBe(false)
     expect(isCheckDue({ ...tracked, checkedAt: null }, [{ releaseDate: '2026-12-19' }], NOW)).toBe(false)
-    expect(isCheckDue({ ...tracked, checkedAt: null }, [], NOW)).toBe(false)
+    expect(isCheckDue({ ...tracked, checkedAt: null }, [], NOW)).toBe(true)
+    expect(isCheckDue({ ...tracked, checkedAt: '2026-11-10' }, [], NOW)).toBe(false)
   })
 
   it('counts the interval in whole days', () => {
@@ -86,7 +87,12 @@ describe('seriesBadge', () => {
     expect(seriesBadge(stale, NOW)).toMatchObject({ state: 'undated', checkDue: true })
   })
 
-  it('shows nothing for a tracked series with no volumes listed', () => {
-    expect(seriesBadge({ ...series, releases: [] }, NOW)).toBeNull()
+  it('treats a tracked series with no volumes listed as waiting on a date', () => {
+    expect(seriesBadge({ ...series, releases: [] }, NOW)).toEqual({ state: 'undated', releaseDate: null, count: 0, checkDue: false })
+    expect(seriesBadge({ ...series, checkedAt: '2026-01-01', releases: [] }, NOW)).toMatchObject({ state: 'undated', checkDue: true })
+  })
+
+  it('shows nothing for a finished series with no volumes listed', () => {
+    expect(seriesBadge({ ...series, finished: true, releases: [] }, NOW)).toBeNull()
   })
 })

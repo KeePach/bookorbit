@@ -48,7 +48,8 @@ export function isCheckDue(
   everyDays: number = CHECK_EVERY_DAYS,
 ): boolean {
   if (!tracking.tracking || tracking.finished) return false
-  if (!releases.some((release) => release.releaseDate === null)) return false
+  // Nothing listed yet is the same as waiting on a date: someone should look for the next volume.
+  if (releases.length > 0 && !releases.some((release) => release.releaseDate === null)) return false
   const since = daysUntil(tracking.checkedAt, now)
   return since === null || -since >= everyDays
 }
@@ -67,11 +68,13 @@ export interface SeriesBadge {
 /** What a series card's badge shows for one tracked series, or null when nothing is listed. */
 export function seriesBadge(series: SeriesReleaseOverviewSeries, now: Date = new Date()): SeriesBadge | null {
   const nearest = series.releases[0]
-  if (!nearest) return null
+  const checkDue = isCheckDue({ tracking: true, finished: series.finished, checkedAt: series.checkedAt }, series.releases, now)
+  // Tracked with nothing listed (often auto-tracked as licensed): still waiting on the next volume.
+  if (!nearest) return series.finished ? null : { state: 'undated', releaseDate: null, count: 0, checkDue }
   return {
     state: releaseState(nearest, now),
     releaseDate: nearest.releaseDate,
     count: series.releases.length,
-    checkDue: isCheckDue({ tracking: true, finished: series.finished, checkedAt: series.checkedAt }, series.releases, now),
+    checkDue,
   }
 }

@@ -63,7 +63,7 @@ describe('SeriesLicensingCard', () => {
     expect(boxes).toHaveLength(2)
     expect((boxes[0].element as HTMLInputElement).checked).toBe(false)
     expect((boxes[1].element as HTMLInputElement).checked).toBe(true)
-    expect(wrapper.text()).toContain('120 series, 45 licensed')
+    expect(wrapper.text()).toContain('120 of your series, 45 licensed')
     expect(wrapper.text()).toContain('MangaBaka')
   })
 

@@ -67,7 +67,8 @@ const waiting = computed(() =>
       undated: series.releases.filter((release) => release.releaseDate === null),
       checkDue: isCheckDue({ tracking: true, finished: series.finished, checkedAt: series.checkedAt }, series.releases),
     }))
-    .filter((entry) => entry.undated.length > 0 && !entry.series.finished),
+    // Nothing listed yet counts too: those are waiting on the next volume being announced.
+    .filter((entry) => (entry.undated.length > 0 || entry.series.releases.length === 0) && !entry.series.finished),
 )
 
 const empty = computed(() => loaded.value && months.value.length === 0 && waiting.value.length === 0)
@@ -170,7 +171,9 @@ async function copyCalendarLink() {
               >
                 {{ entry.series.name }}
               </RouterLink>
-              <p class="truncate text-xs text-muted-foreground">{{ entry.undated.map((release) => release.volume).join(', ') }}</p>
+              <p class="truncate text-xs text-muted-foreground">
+                {{ entry.undated.length > 0 ? entry.undated.map((release) => release.volume).join(', ') : t('seriesReleases.agenda.noVolume') }}
+              </p>
             </div>
             <span
               v-if="entry.checkDue"

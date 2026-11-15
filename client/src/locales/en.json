@@ -14052,7 +14052,7 @@
       "collectedNext": "{volume} collected. {next} added with no date yet."
     },
     "badge": {
-      "title": "{count, plural, one {# upcoming volume} other {# upcoming volumes}}",
+      "title": "{count, plural, =0 {Tracked, no volume listed yet} one {# upcoming volume} other {# upcoming volumes}}",
       "today": "Today",
       "out": "Out",
       "inDays": "{count}d",
@@ -14068,6 +14068,7 @@
       "copyFailed": "Could not copy the link.",
       "download": "Download .ics",
       "waiting": "Waiting for a date",
+      "noVolume": "No volume listed yet",
       "empty": "No upcoming volumes yet. Track a series from its page and they gather here."
     },
     "import": {
@@ -14107,7 +14108,7 @@
       "save": "Save libraries",
       "saved": "Libraries saved.",
       "started": "Licensing check started.",
-      "lastRun": "Last checked {day}: {series} series, {licensed} licensed.",
+      "lastRun": "Last checked {day}: {series} of your series, {licensed} licensed.",
       "lastFailed": "The last check on {day} failed.",
       "neverRan": "Never checked yet.",
       "credit": "Licensing data from MangaBaka.",
