@@ -38,6 +38,7 @@ function makeRow(overrides?: Partial<SeriesReleaseRow>): SeriesReleaseRow {
     note: null,
     cover: null,
     status: 'upcoming',
+    notifiedStage: null,
     createdBy: 7,
     createdAt: NOW,
     updatedAt: NOW,
@@ -46,7 +47,7 @@ function makeRow(overrides?: Partial<SeriesReleaseRow>): SeriesReleaseRow {
 }
 
 function makeTrackingRow(overrides?: Partial<SeriesReleaseTrackingRow>): SeriesReleaseTrackingRow {
-  return { seriesId: 3, finished: false, checkedAt: null, createdAt: NOW, updatedAt: NOW, ...overrides };
+  return { seriesId: 3, finished: false, checkedAt: null, checkNotifiedAt: null, createdAt: NOW, updatedAt: NOW, ...overrides };
 }
 
 /** The series is visible in libraries 1 and 2; only library 1 is editable unless stated. */

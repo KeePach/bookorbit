@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, count, eq, exists, inArray, sql } from 'drizzle-orm';
+import { and, asc, count, eq, exists, inArray, isNotNull, lte, notExists, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 
 import type { ContentFilterRules, SeriesReleaseStatus } from '@bookorbit/types';
@@ -31,6 +31,20 @@ export interface TrackedSeriesRow {
   finished: boolean;
   checkedAt: string | null;
   createdAt: Date;
+}
+
+export interface DueReleaseRow {
+  id: number;
+  seriesId: number;
+  seriesName: string;
+  volume: string;
+  releaseDate: string;
+  notifiedStage: 'soon' | 'today' | null;
+}
+
+export interface CheckDueSeriesRow {
+  seriesId: number;
+  seriesName: string;
 }
 
 @Injectable()
@@ -133,9 +147,11 @@ export class SeriesReleaseRepository {
   /** Null when the entry is gone, or `conflict` when the new label is taken by another upcoming volume. */
   async update(seriesId: number, id: number, patch: SeriesReleasePatch): Promise<SeriesReleaseRow | null | 'conflict'> {
     try {
+      // A changed date re-arms the reminders, so the moved volume is announced again.
+      const resolved = 'releaseDate' in patch ? { ...patch, notifiedStage: null } : patch;
       const [row] = await this.db
         .update(seriesReleases)
-        .set(patch)
+        .set(resolved)
         .where(and(eq(seriesReleases.seriesId, seriesId), eq(seriesReleases.id, id)))
         .returning();
       return row ?? null;
@@ -177,5 +193,79 @@ export class SeriesReleaseRepository {
         .returning();
       return { collected, next: opened ?? null };
     });
+  }
+
+  /** Upcoming dated volumes inside the reminder window that have not had their "out" reminder yet. */
+  listDueForNotification(horizon: string): Promise<DueReleaseRow[]> {
+    return this.db
+      .select({
+        id: seriesReleases.id,
+        seriesId: seriesReleases.seriesId,
+        seriesName: bookSeries.name,
+        volume: seriesReleases.volume,
+        releaseDate: sql<string>`${seriesReleases.releaseDate}`,
+        notifiedStage: seriesReleases.notifiedStage,
+      })
+      .from(seriesReleases)
+      .innerJoin(bookSeries, eq(bookSeries.id, seriesReleases.seriesId))
+      .where(
+        and(
+          eq(seriesReleases.status, 'upcoming'),
+          isNotNull(seriesReleases.releaseDate),
+          lte(seriesReleases.releaseDate, horizon),
+          sql`${seriesReleases.notifiedStage} is distinct from 'today'`,
+        ),
+      )
+      .orderBy(asc(seriesReleases.releaseDate), asc(seriesReleases.id));
+  }
+
+  /** The libraries whose users should hear about a series, via the books it already has there. */
+  listLibrariesForSeries(seriesIds: number[]): Promise<{ seriesId: number; libraryId: number }[]> {
+    if (seriesIds.length === 0) return Promise.resolve([]);
+    return this.db
+      .selectDistinct({ seriesId: bookSeriesMemberships.seriesId, libraryId: books.libraryId })
+      .from(bookSeriesMemberships)
+      .innerJoin(books, eq(books.id, bookSeriesMemberships.bookId))
+      .where(inArray(bookSeriesMemberships.seriesId, seriesIds));
+  }
+
+  /**
+   * Tracked, unfinished series with no dated upcoming volume, whose last check — and the last
+   * reminder about it — are both at least a check interval old.
+   */
+  listCheckDueForNotification(cutoff: string): Promise<CheckDueSeriesRow[]> {
+    return this.db
+      .select({ seriesId: seriesReleaseTracking.seriesId, seriesName: bookSeries.name })
+      .from(seriesReleaseTracking)
+      .innerJoin(bookSeries, eq(bookSeries.id, seriesReleaseTracking.seriesId))
+      .where(
+        and(
+          eq(seriesReleaseTracking.finished, false),
+          sql`coalesce(${seriesReleaseTracking.checkedAt}, date(${seriesReleaseTracking.createdAt})) <= ${cutoff}`,
+          sql`(${seriesReleaseTracking.checkNotifiedAt} is null or ${seriesReleaseTracking.checkNotifiedAt} <= ${cutoff})`,
+          notExists(
+            this.db
+              .select({ one: sql`1` })
+              .from(seriesReleases)
+              .where(
+                and(
+                  eq(seriesReleases.seriesId, seriesReleaseTracking.seriesId),
+                  eq(seriesReleases.status, 'upcoming'),
+                  isNotNull(seriesReleases.releaseDate),
+                ),
+              ),
+          ),
+        ),
+      )
+      .orderBy(asc(bookSeries.name));
+  }
+
+  async setNotifiedStage(id: number, stage: 'soon' | 'today'): Promise<void> {
+    await this.db.update(seriesReleases).set({ notifiedStage: stage }).where(eq(seriesReleases.id, id));
+  }
+
+  async setCheckNotified(seriesIds: number[], day: string): Promise<void> {
+    if (seriesIds.length === 0) return;
+    await this.db.update(seriesReleaseTracking).set({ checkNotifiedAt: day }).where(inArray(seriesReleaseTracking.seriesId, seriesIds));
   }
 }

@@ -13314,6 +13314,10 @@
         "bookRequests": {
           "label": "Book requests",
           "description": "When a book request is submitted, decided, or the book becomes available."
+        },
+        "seriesReleases": {
+          "label": "Series releases",
+          "description": "When a tracked series has a volume out or due soon, or its release dates need a check."
         }
       }
     }

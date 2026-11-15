@@ -1,6 +1,7 @@
 import {
   AudioLines,
   BookPlus,
+  CalendarClock,
   FileCog,
   FolderSync,
   HardDriveDownload,
@@ -15,7 +16,7 @@ import {
 import type { NotificationCategory } from '@bookorbit/types'
 
 export const NOTIFICATION_CATEGORY_GROUPS = [
-  { id: 'library', categories: ['scanning', 'metadata', 'authorEnrichment'] },
+  { id: 'library', categories: ['scanning', 'metadata', 'authorEnrichment', 'seriesReleases'] },
   { id: 'files', categories: ['fileWriteBack', 'fileRename', 'bulkRename', 'readAloud', 'migration'] },
   { id: 'integrations', categories: ['bookDock', 'bookRequests', 'email'] },
   { id: 'personal', categories: ['achievements'] },
@@ -34,4 +35,5 @@ export const NOTIFICATION_CATEGORY_ICONS: Record<NotificationCategory, LucideIco
   email: Mail,
   readAloud: AudioLines,
   achievements: Trophy,
+  seriesReleases: CalendarClock,
 }

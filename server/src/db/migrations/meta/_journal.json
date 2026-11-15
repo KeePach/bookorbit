@@ -1030,6 +1030,13 @@
       "when": 1794480000000,
       "tag": "0146_add_series_releases",
       "breakpoints": true
+    },
+    {
+      "idx": 147,
+      "version": "7",
+      "when": 1794490000000,
+      "tag": "0147_add_series_release_notifications",
+      "breakpoints": true
     }
   ]
 }

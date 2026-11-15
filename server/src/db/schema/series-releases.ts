@@ -13,6 +13,8 @@ export const seriesReleaseTracking = pgTable('series_release_tracking', {
   finished: boolean('finished').notNull().default(false),
   // The last day someone looked for a release date.
   checkedAt: date('checked_at', { mode: 'string' }),
+  // The last day the "time to check for a date" reminder went out, so it nags monthly, not daily.
+  checkNotifiedAt: date('check_notified_at', { mode: 'string' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true })
     .notNull()
@@ -37,6 +39,8 @@ export const seriesReleases = pgTable(
     // An https link or a small inline picture; the limit matches SERIES_RELEASE_COVER_MAX_LENGTH.
     cover: text('cover'),
     status: varchar('status', { length: 12 }).$type<'upcoming' | 'collected' | 'skipped'>().notNull().default('upcoming'),
+    // How far the reminders got for this volume ('soon', then 'today'), so each fires once.
+    notifiedStage: varchar('notified_stage', { length: 10 }).$type<'soon' | 'today'>(),
     createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true })

@@ -31,6 +31,9 @@ export const NotificationType = {
   ReadAloudNeedsReview: "read_aloud_needs_review",
   ReadAloudFailed: "read_aloud_failed",
   ReadAloudReviewExpiring: "read_aloud_review_expiring",
+  SeriesReleaseToday: "series_release_today",
+  SeriesReleaseSoon: "series_release_soon",
+  SeriesReleaseCheckDue: "series_release_check_due",
 } as const;
 
 export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType];
@@ -61,6 +64,7 @@ export const NOTIFICATION_CATEGORY_IDS = [
   "bulkRename",
   "achievements",
   "readAloud",
+  "seriesReleases",
 ] as const;
 
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORY_IDS)[number];
@@ -108,6 +112,9 @@ export const NOTIFICATION_TYPE_META: Record<NotificationType, NotificationTypeMe
   [NotificationType.ReadAloudNeedsReview]: { category: "readAloud", severity: "warning" },
   [NotificationType.ReadAloudFailed]: { category: "readAloud", severity: "error" },
   [NotificationType.ReadAloudReviewExpiring]: { category: "readAloud", severity: "warning" },
+  [NotificationType.SeriesReleaseToday]: { category: "seriesReleases", severity: "success" },
+  [NotificationType.SeriesReleaseSoon]: { category: "seriesReleases", severity: "success" },
+  [NotificationType.SeriesReleaseCheckDue]: { category: "seriesReleases", severity: "warning" },
 };
 
 export const NOTIFICATION_CATEGORIES: Record<NotificationCategory, readonly NotificationType[]> = NOTIFICATION_CATEGORY_IDS.reduce(
