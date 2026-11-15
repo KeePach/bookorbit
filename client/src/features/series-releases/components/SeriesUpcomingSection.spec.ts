@@ -34,7 +34,7 @@ function response(overrides: Partial<SeriesReleasesResponse> = {}): SeriesReleas
 
 async function mountSection(body: SeriesReleasesResponse) {
   apiMock.mockResolvedValue(json(body))
-  const wrapper = mount(SeriesUpcomingSection, { props: { seriesId: 3 }, attachTo: document.body })
+  const wrapper = mount(SeriesUpcomingSection, { props: { seriesId: 3 }, attachTo: document.body, global: { stubs: { RouterLink: true } } })
   await flushPromises()
   return wrapper
 }

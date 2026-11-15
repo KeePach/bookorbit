@@ -673,6 +673,12 @@ export const routes: RouteRecordRaw[] = [
         },
       },
       {
+        path: '/releases',
+        name: 'series-releases',
+        component: () => import('@/features/series-releases/views/ReleaseAgendaView.vue'),
+        meta: { titleRow: true, title: () => t('titles.seriesReleases') },
+      },
+      {
         path: '/tools',
         component: () => import('@/features/tools/views/ToolsView.vue'),
         children: [

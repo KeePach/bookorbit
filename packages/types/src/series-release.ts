@@ -68,6 +68,29 @@ export interface SeriesReleaseTrackingUpdate {
   checkedToday?: boolean;
 }
 
+/** One upcoming volume in the overview. Covers stay out so the whole answer loads in one small request. */
+export type SeriesReleaseOverviewRelease = Pick<SeriesRelease, "id" | "volume" | "releaseDate" | "storeUrl" | "note">;
+
+export interface SeriesReleaseOverviewSeries {
+  seriesId: number;
+  name: string;
+  finished: boolean;
+  /** Never null here: the day tracking started counts as the first check. */
+  checkedAt: string | null;
+  /** Nearest date first, volumes without a date last. */
+  releases: SeriesReleaseOverviewRelease[];
+}
+
+/** Every tracked series the caller can see: grid badges, the agenda page and the calendar read this. */
+export interface SeriesReleasesOverviewResponse {
+  series: SeriesReleaseOverviewSeries[];
+}
+
+/** Where this user's release calendar lives; the client prefixes its own origin. */
+export interface SeriesReleaseCalendarInfo {
+  path: string;
+}
+
 /** One entry of the `bookorbit-next-releases.json` backup the userscript wrote, as far as it is read. */
 export interface SeriesReleaseImportEntry {
   /** BookOrbit's own series id. Entries without one cannot be placed. */

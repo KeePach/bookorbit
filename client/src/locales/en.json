@@ -14047,6 +14047,25 @@
       "collected": "{volume} collected.",
       "collectedNext": "{volume} collected. {next} added with no date yet."
     },
+    "badge": {
+      "title": "{count, plural, one {# upcoming volume} other {# upcoming volumes}}",
+      "today": "Today",
+      "out": "Out",
+      "inDays": "{count}d",
+      "noDate": "No date",
+      "check": "Check"
+    },
+    "agenda": {
+      "title": "Upcoming releases",
+      "subtitle": "Every volume you are waiting for, across all tracked series.",
+      "allLink": "All upcoming",
+      "copyLink": "Copy calendar link",
+      "linkCopied": "Calendar link copied. Paste it into your calendar app as a subscription.",
+      "copyFailed": "Could not copy the link.",
+      "download": "Download .ics",
+      "waiting": "Waiting for a date",
+      "empty": "No upcoming volumes yet. Track a series from its page and they gather here."
+    },
     "import": {
       "done": "{imported, plural, one {# entry} other {# entries}} imported, {skipped} skipped.",
       "skippedHint": "Skipped entries had no matching series you can edit, no volume, or were already listed.",
@@ -15350,6 +15369,7 @@
     "nextImage": "Next image"
   },
   "titles": {
+    "seriesReleases": "Upcoming releases",
     "dashboard": "Dashboard",
     "libraries": "Libraries",
     "opds": "OPDS",

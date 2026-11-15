@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { CHECK_EVERY_DAYS, daysUntil, isCheckDue, parseLocalDay, releaseState } from './release-state'
+import { CHECK_EVERY_DAYS, daysUntil, isCheckDue, parseLocalDay, releaseState, seriesBadge } from './release-state'
 
 const NOW = new Date(2026, 10, 14, 15, 30)
 
@@ -62,5 +62,31 @@ describe('isCheckDue', () => {
   it('is never due for a series that is not followed or has no more volumes', () => {
     expect(isCheckDue({ tracking: false, finished: false, checkedAt: null }, [{ releaseDate: null }], NOW)).toBe(false)
     expect(isCheckDue({ tracking: true, finished: true, checkedAt: null }, [{ releaseDate: null }], NOW)).toBe(false)
+  })
+})
+
+describe('seriesBadge', () => {
+  const series = {
+    seriesId: 3,
+    name: 'Aki Sora',
+    finished: false,
+    checkedAt: '2026-11-10',
+    releases: [
+      { id: 1, volume: '6', releaseDate: '2026-11-20', storeUrl: null, note: null },
+      { id: 2, volume: '7', releaseDate: null, storeUrl: null, note: null },
+    ],
+  }
+
+  it('describes the nearest volume and counts the rest', () => {
+    expect(seriesBadge(series, NOW)).toEqual({ state: 'soon', releaseDate: '2026-11-20', count: 2, checkDue: false })
+  })
+
+  it('asks for a check when no date is known and nobody looked for a while', () => {
+    const stale = { ...series, checkedAt: '2026-01-01', releases: [{ id: 2, volume: '7', releaseDate: null, storeUrl: null, note: null }] }
+    expect(seriesBadge(stale, NOW)).toMatchObject({ state: 'undated', checkDue: true })
+  })
+
+  it('shows nothing for a tracked series with no volumes listed', () => {
+    expect(seriesBadge({ ...series, releases: [] }, NOW)).toBeNull()
   })
 })

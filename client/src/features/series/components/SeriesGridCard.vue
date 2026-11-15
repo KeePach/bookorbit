@@ -8,6 +8,7 @@ import { useCoverVersions } from '@/features/book/composables/useCoverVersions'
 import BookCoverArtwork from '@/features/book/components/BookCoverArtwork.vue'
 import SeriesVolumeTrack from './SeriesVolumeTrack.vue'
 import SeriesLibraryChip from './SeriesLibraryChip.vue'
+import SeriesReleaseBadge from '@/features/series-releases/components/SeriesReleaseBadge.vue'
 import { seriesAuthorLine, seriesExtraAuthorCount, seriesRowFacts, seriesCoverSlots } from '../lib/series-summary'
 import { STACK_MAX_VISIBLE, coverStackLayout, orderForStack } from '../lib/cover-stack-layout'
 
@@ -151,6 +152,7 @@ function handleOpen() {
           <Check :size="12" />
           {{ t('series.status.read') }}
         </span>
+        <SeriesReleaseBadge :series-id="series.id" />
         <SeriesLibraryChip :library-names="series.libraryNames" class="series-card-library min-w-0" />
         <span class="ml-auto shrink-0 text-[12.5px] font-semibold tabular-nums" :class="facts.isComplete ? 'text-success' : 'text-muted-foreground'">
           {{ progressLabel }}

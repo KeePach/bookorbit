@@ -1,4 +1,4 @@
-import type { SeriesRelease, SeriesReleaseTracking } from '@bookorbit/types'
+import type { SeriesRelease, SeriesReleaseOverviewSeries, SeriesReleaseTracking } from '@bookorbit/types'
 
 /** A volume this close counts as coming up soon. */
 export const SOON_DAYS = 14
@@ -51,4 +51,27 @@ export function isCheckDue(
   if (!releases.some((release) => release.releaseDate === null)) return false
   const since = daysUntil(tracking.checkedAt, now)
   return since === null || -since >= everyDays
+}
+
+export interface SeriesBadge {
+  /** The state of the nearest upcoming volume. */
+  state: ReleaseState
+  /** Its date, null while none is known. */
+  releaseDate: string | null
+  /** How many volumes are listed as upcoming. */
+  count: number
+  /** Nobody has looked for a date in a while. */
+  checkDue: boolean
+}
+
+/** What a series card's badge shows for one tracked series, or null when nothing is listed. */
+export function seriesBadge(series: SeriesReleaseOverviewSeries, now: Date = new Date()): SeriesBadge | null {
+  const nearest = series.releases[0]
+  if (!nearest) return null
+  return {
+    state: releaseState(nearest, now),
+    releaseDate: nearest.releaseDate,
+    count: series.releases.length,
+    checkDue: isCheckDue({ tracking: true, finished: series.finished, checkedAt: series.checkedAt }, series.releases, now),
+  }
 }

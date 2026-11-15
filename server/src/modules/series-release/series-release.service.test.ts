@@ -63,6 +63,8 @@ function makeService(options: { visible?: number[]; editable?: number[]; seriesL
     update: vi.fn().mockResolvedValue(makeRow()),
     delete: vi.fn().mockResolvedValue(true),
     collect: vi.fn(),
+    listTracked: vi.fn().mockResolvedValue([]),
+    listOpenForSeries: vi.fn().mockResolvedValue([]),
   };
   const seriesRepo = {
     // Series 3 lives in `seriesLibraries`; every other id does not exist.
@@ -408,6 +410,49 @@ describe('SeriesReleaseService', () => {
       });
 
       expect(seriesRepo.findDetail).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('overview', () => {
+    it('groups the open volumes under their series, nearest date first, undated series last', async () => {
+      const { service, releaseRepo } = makeService();
+      releaseRepo.listTracked.mockResolvedValue([
+        { seriesId: 3, name: 'Beta', finished: false, checkedAt: '2026-11-01', createdAt: NOW },
+        { seriesId: 5, name: 'Alpha', finished: false, checkedAt: null, createdAt: NOW },
+        { seriesId: 8, name: 'Gamma', finished: true, checkedAt: '2026-10-01', createdAt: NOW },
+      ]);
+      releaseRepo.listOpenForSeries.mockResolvedValue([
+        makeRow({ id: 1, seriesId: 3, volume: '6', releaseDate: '2026-12-19' }),
+        makeRow({ id: 2, seriesId: 3, volume: '7', releaseDate: null, storeUrl: null }),
+        makeRow({ id: 4, seriesId: 5, volume: '2', releaseDate: null, storeUrl: null }),
+      ]);
+
+      const result = await service.overview(makeUser());
+
+      expect(releaseRepo.listOpenForSeries).toHaveBeenCalledWith([3, 5, 8]);
+      expect(result.series.map((entry) => entry.seriesId)).toEqual([3, 5, 8]);
+      expect(result.series[0].releases.map((release) => release.volume)).toEqual(['6', '7']);
+      expect(result.series[1]).toMatchObject({ name: 'Alpha', checkedAt: '2026-11-14', releases: [{ volume: '2' }] });
+      expect(result.series[2].releases).toEqual([]);
+      expect(result.series[0].releases[0]).not.toHaveProperty('cover');
+    });
+
+    it('passes content filters for ordinary users and none for superusers', async () => {
+      const { service, releaseRepo } = makeService();
+      await service.overview(makeUser());
+      expect(releaseRepo.listTracked).toHaveBeenCalledWith([1, 2], EMPTY_CONTENT_FILTER_RULES);
+
+      const admin = makeService();
+      await admin.service.overview(makeUser({ isSuperuser: true }));
+      expect(admin.releaseRepo.listTracked).toHaveBeenCalledWith([1, 2], undefined);
+    });
+
+    it('answers empty without queries when the caller can see no library', async () => {
+      const { service, releaseRepo, libraryService } = makeService();
+      libraryService.findAccessibleLibraryIds.mockResolvedValue([]);
+
+      await expect(service.overview(makeUser())).resolves.toEqual({ series: [] });
+      expect(releaseRepo.listTracked).not.toHaveBeenCalled();
     });
   });
 });

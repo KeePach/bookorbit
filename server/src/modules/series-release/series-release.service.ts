@@ -8,6 +8,9 @@ import {
   type SeriesReleaseCollectResult,
   type SeriesReleaseImportRequest,
   type SeriesReleaseImportResult,
+  type SeriesReleaseOverviewRelease,
+  type SeriesReleaseOverviewSeries,
+  type SeriesReleasesOverviewResponse,
   type SeriesReleasesResponse,
   type SeriesReleaseTracking,
 } from '@bookorbit/types';
@@ -62,6 +65,36 @@ export class SeriesReleaseService {
     private readonly seriesRepo: SeriesRepository,
     private readonly libraryService: LibraryService,
   ) {}
+
+  /**
+   * Every tracked series the caller can see, with its upcoming volumes. The series with the
+   * nearest date come first; series whose volumes all lack a date follow, by name.
+   */
+  async overview(user: RequestUser): Promise<SeriesReleasesOverviewResponse> {
+    const libraryIds = await this.libraryService.findAccessibleLibraryIds(user);
+    if (libraryIds.length === 0) return { series: [] };
+
+    const tracked = await this.releaseRepo.listTracked(libraryIds, user.isSuperuser ? undefined : user.contentFilters);
+    const open = await this.releaseRepo.listOpenForSeries(tracked.map((row) => row.seriesId));
+    const releasesBySeries = new Map<number, SeriesReleaseOverviewRelease[]>();
+    for (const row of open) {
+      const list = releasesBySeries.get(row.seriesId) ?? [];
+      list.push({ id: row.id, volume: row.volume, releaseDate: row.releaseDate, storeUrl: row.storeUrl, note: row.note });
+      releasesBySeries.set(row.seriesId, list);
+    }
+
+    const series: SeriesReleaseOverviewSeries[] = tracked.map((row) => ({
+      seriesId: row.seriesId,
+      name: row.name,
+      finished: row.finished,
+      // The day tracking started counts as a check, as in toSeriesReleaseTracking.
+      checkedAt: row.checkedAt ?? todayIso(row.createdAt),
+      releases: releasesBySeries.get(row.seriesId) ?? [],
+    }));
+    const nearest = (entry: SeriesReleaseOverviewSeries) => entry.releases[0]?.releaseDate ?? '9999-99-99';
+    series.sort((a, b) => nearest(a).localeCompare(nearest(b)) || a.name.localeCompare(b.name));
+    return { series };
+  }
 
   async get(user: RequestUser, seriesId: number): Promise<SeriesReleasesResponse> {
     const accessible = await this.libraryService.findAccessibleLibraryIds(user);

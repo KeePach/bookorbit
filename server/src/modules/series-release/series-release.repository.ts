@@ -1,13 +1,23 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, count, eq, sql } from 'drizzle-orm';
+import { and, asc, count, eq, exists, inArray, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 
-import type { SeriesReleaseStatus } from '@bookorbit/types';
+import type { ContentFilterRules, SeriesReleaseStatus } from '@bookorbit/types';
 
+import { buildContentFilterClauses } from '../../common/utils/content-filter-sql.utils';
 import { isUniqueViolation } from '../../common/utils/db-error.utils';
 import { DB } from '../../db';
 import * as schema from '../../db/schema';
-import { seriesReleases, seriesReleaseTracking, type NewSeriesRelease, type SeriesReleaseRow, type SeriesReleaseTrackingRow } from '../../db/schema';
+import {
+  bookSeries,
+  bookSeriesMemberships,
+  books,
+  seriesReleases,
+  seriesReleaseTracking,
+  type NewSeriesRelease,
+  type SeriesReleaseRow,
+  type SeriesReleaseTrackingRow,
+} from '../../db/schema';
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -15,9 +25,55 @@ export type SeriesReleaseInsert = Pick<NewSeriesRelease, 'seriesId' | 'volume' |
 export type SeriesReleasePatch = Partial<Pick<NewSeriesRelease, 'volume' | 'releaseDate' | 'storeUrl' | 'note' | 'cover' | 'status'>>;
 export type SeriesReleaseTrackingPatch = Partial<Pick<SeriesReleaseTrackingRow, 'finished' | 'checkedAt'>>;
 
+export interface TrackedSeriesRow {
+  seriesId: number;
+  name: string;
+  finished: boolean;
+  checkedAt: string | null;
+  createdAt: Date;
+}
+
 @Injectable()
 export class SeriesReleaseRepository {
   constructor(@Inject(DB) private readonly db: Db) {}
+
+  /**
+   * Every tracked series with at least one book the caller can see, by name. The content filter
+   * runs inside the visibility check, so a series whose books are all filtered away stays hidden.
+   */
+  listTracked(libraryIds: number[], contentFilters?: ContentFilterRules): Promise<TrackedSeriesRow[]> {
+    const filterClauses = contentFilters ? buildContentFilterClauses(contentFilters, this.db) : [];
+    return this.db
+      .select({
+        seriesId: seriesReleaseTracking.seriesId,
+        name: bookSeries.name,
+        finished: seriesReleaseTracking.finished,
+        checkedAt: seriesReleaseTracking.checkedAt,
+        createdAt: seriesReleaseTracking.createdAt,
+      })
+      .from(seriesReleaseTracking)
+      .innerJoin(bookSeries, eq(bookSeries.id, seriesReleaseTracking.seriesId))
+      .where(
+        exists(
+          this.db
+            .select({ one: sql`1` })
+            .from(bookSeriesMemberships)
+            .innerJoin(books, eq(books.id, bookSeriesMemberships.bookId))
+            .where(and(eq(bookSeriesMemberships.seriesId, seriesReleaseTracking.seriesId), inArray(books.libraryId, libraryIds), ...filterClauses)),
+        ),
+      )
+      .orderBy(asc(bookSeries.name));
+  }
+
+  /** The upcoming volumes of several series in one query; nearest date first within each. */
+  listOpenForSeries(seriesIds: number[]): Promise<SeriesReleaseRow[]> {
+    if (seriesIds.length === 0) return Promise.resolve([]);
+    return this.db
+      .select()
+      .from(seriesReleases)
+      .where(and(inArray(seriesReleases.seriesId, seriesIds), eq(seriesReleases.status, 'upcoming')))
+      .orderBy(sql`${seriesReleases.releaseDate} asc nulls last`, asc(seriesReleases.id));
+  }
 
   async findTracking(seriesId: number): Promise<SeriesReleaseTrackingRow | null> {
     const [row] = await this.db.select().from(seriesReleaseTracking).where(eq(seriesReleaseTracking.seriesId, seriesId)).limit(1);

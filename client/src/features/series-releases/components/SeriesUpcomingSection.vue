@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 import { AlertCircle, CalendarCheck, FileUp, Plus } from '@lucide/vue'
@@ -144,7 +145,12 @@ async function handleBackupChosen(event: Event) {
   <section v-if="visible && tracking" class="rounded-lg border border-border bg-muted/30 p-3" data-testid="series-upcoming">
     <div class="flex flex-wrap items-start justify-between gap-2">
       <div class="min-w-0">
-        <h2 class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{{ t('seriesReleases.title') }}</h2>
+        <div class="flex items-center gap-2">
+          <h2 class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{{ t('seriesReleases.title') }}</h2>
+          <RouterLink :to="{ name: 'series-releases' }" class="text-[11px] font-medium text-primary hover:underline">
+            {{ t('seriesReleases.agenda.allLink') }}
+          </RouterLink>
+        </div>
         <p v-if="tracking.tracking" class="mt-0.5 text-xs text-muted-foreground">{{ checkedLabel }}</p>
       </div>
 
