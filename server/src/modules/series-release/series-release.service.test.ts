@@ -416,4 +416,9 @@ describe('toSeriesReleaseTracking', () => {
   it('reads an absent row as not tracked', () => {
     expect(toSeriesReleaseTracking(3, null)).toEqual({ seriesId: 3, tracking: false, finished: false, checkedAt: null });
   });
+
+  it('counts the day tracking started as a check, so the reminder waits its full interval', () => {
+    expect(toSeriesReleaseTracking(3, makeTrackingRow())).toEqual({ seriesId: 3, tracking: true, finished: false, checkedAt: '2026-11-14' });
+    expect(toSeriesReleaseTracking(3, makeTrackingRow({ checkedAt: '2026-11-01' })).checkedAt).toBe('2026-11-01');
+  });
 });

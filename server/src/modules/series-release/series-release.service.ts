@@ -40,7 +40,10 @@ export function toSeriesRelease(row: SeriesReleaseRow): SeriesRelease {
 }
 
 export function toSeriesReleaseTracking(seriesId: number, row: SeriesReleaseTrackingRow | null): SeriesReleaseTracking {
-  return { seriesId, tracking: row !== null, finished: row?.finished ?? false, checkedAt: row?.checkedAt ?? null };
+  if (!row) return { seriesId, tracking: false, finished: false, checkedAt: null };
+  // Starting to follow counts as a check: whoever set it up has just looked at the announcements,
+  // so the "time to check for a date" reminder waits its full interval instead of firing at once.
+  return { seriesId, tracking: true, finished: row.finished, checkedAt: row.checkedAt ?? todayIso(row.createdAt) };
 }
 
 function text(value: unknown): string {
