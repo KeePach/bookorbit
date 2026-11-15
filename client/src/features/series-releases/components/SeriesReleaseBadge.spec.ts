@@ -52,10 +52,23 @@ describe('SeriesReleaseBadge', () => {
     expect((await mountBadge(overview(null, '2026-11-10'))).text()).toContain('No date')
   })
 
-  it('renders nothing for a series that is not tracked', async () => {
+  it('renders nothing for a series that is not tracked, or for no series at all', async () => {
     const wrapper = await mountBadge(overview('2026-12-19'), 999)
-
     expect(wrapper.find('[data-testid="series-release-badge"]').exists()).toBe(false)
+
+    apiMock.mockResolvedValue(json(overview('2026-12-19')))
+    const none = mount(SeriesReleaseBadge, { props: { seriesId: null, now: NOW } })
+    await flushPromises()
+    expect(none.find('[data-testid="series-release-badge"]').exists()).toBe(false)
+  })
+
+  it('draws the overlay variant as a dark cover pill', async () => {
+    apiMock.mockResolvedValue(json(overview('2026-11-14')))
+    const wrapper = mount(SeriesReleaseBadge, { props: { seriesId: 3, now: NOW, variant: 'overlay' } })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="series-release-badge"]').classes()).toContain('bg-black/60')
+    expect(wrapper.text()).toContain('Today')
   })
 
   it('asks the server once for a whole page of badges', async () => {

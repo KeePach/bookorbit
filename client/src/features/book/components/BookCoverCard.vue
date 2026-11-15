@@ -2,6 +2,7 @@
 import type { BookCard, BookFileRef, ConcreteBookMediaKind, CoverAspectRatio } from '@bookorbit/types'
 import { getBookMediaKind, getBookMediaProfile, isAudioFormat, READER_OPENABLE_FORMATS } from '@bookorbit/types'
 import BookCardFormatBadges from './BookCardFormatBadges.vue'
+import SeriesReleaseBadge from '@/features/series-releases/components/SeriesReleaseBadge.vue'
 import BookCardFormatList from './BookCardFormatList.vue'
 import { bookFormatEntries, fileFormatKey, formatKeyName } from '../lib/book-formats'
 import { cardMediaView } from '../lib/card-media'
@@ -514,6 +515,8 @@ const secondaryLabelText = computed(() => resolveBookLabel(gridCardSecondaryLabe
                 <p>{{ seriesPositionTooltip }}</p>
               </TooltipContent>
             </Tooltip>
+
+            <SeriesReleaseBadge :series-id="book.seriesId" variant="overlay" />
           </div>
 
           <!-- Bottom-left overlay: rating -->
