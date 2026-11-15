@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { NotificationType } from '@bookorbit/types';
+import { NotificationType, Permission } from '@bookorbit/types';
 
 import { NotificationService } from '../notification/notification.service';
+import { SeriesLicenseRepository } from './series-license.repository';
 import { SeriesReleaseRepository, type DueReleaseRow } from './series-release.repository';
 import { todayIso } from './series-release.validation';
 
@@ -27,6 +28,7 @@ export class SeriesReleaseNotifierService {
   constructor(
     private readonly repo: SeriesReleaseRepository,
     private readonly notifications: NotificationService,
+    private readonly licenseRepo: SeriesLicenseRepository,
   ) {}
 
   async runDaily(now: Date = new Date()): Promise<void> {
@@ -35,8 +37,9 @@ export class SeriesReleaseNotifierService {
     try {
       const releaseReminders = await this.notifyDueReleases(today);
       const checkReminders = await this.notifyCheckDue(today);
+      const staleReminder = await this.notifyStaleLicenseData(today);
       this.logger.log(
-        `[${event}] [end] day=${today} releaseReminders=${releaseReminders} checkReminders=${checkReminders} - series release reminders dispatched`,
+        `[${event}] [end] day=${today} releaseReminders=${releaseReminders} checkReminders=${checkReminders} staleReminder=${staleReminder} - series release reminders dispatched`,
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -113,5 +116,30 @@ export class SeriesReleaseNotifierService {
       today,
     );
     return series.length;
+  }
+
+  /**
+   * The monthly nudge to re-run the manual MangaBaka licensing check: it goes to the people
+   * who can run it, once per month, and only when licensing is actually set up.
+   */
+  private async notifyStaleLicenseData(today: string): Promise<boolean> {
+    const settings = await this.licenseRepo.getSettings();
+    if (!settings || settings.libraryIds.length === 0) return false;
+    const cutoff = addDaysIso(today, -RELEASE_CHECK_EVERY_DAYS);
+    const lastRun = settings.lastRunAt ? todayIso(settings.lastRunAt) : null;
+    if (lastRun && lastRun > cutoff) return false;
+    if (settings.staleNotifiedAt && settings.staleNotifiedAt > cutoff) return false;
+    await this.notifications.notify({
+      type: NotificationType.SeriesReleaseCheckDue,
+      title: 'Licensing data is stale',
+      message: lastRun
+        ? `MangaBaka licensing was last checked on ${lastRun}. Run a new check from the releases page.`
+        : 'MangaBaka licensing has never been checked. Run the first check from the releases page.',
+      actionUrl: '/releases',
+      meta: { lastRunAt: lastRun },
+      scope: { kind: 'permission', permission: Permission.ManageMetadataConfig },
+    });
+    await this.licenseRepo.setStaleNotified(today);
+    return true;
   }
 }

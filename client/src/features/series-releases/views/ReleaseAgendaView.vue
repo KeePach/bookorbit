@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { formatDate } from '@/i18n/formatters'
 import { apiJson } from '@/lib/api-json'
 import { copyToClipboard } from '@/lib/clipboard'
+import SeriesLicensingCard from '../components/SeriesLicensingCard.vue'
 import { useReleaseOverview } from '../composables/useReleaseOverview'
 import { daysUntil, isCheckDue, parseLocalDay, releaseState, type ReleaseState } from '../lib/release-state'
 
@@ -183,5 +184,7 @@ async function copyCalendarLink() {
         </ul>
       </section>
     </template>
+
+    <SeriesLicensingCard />
   </div>
 </template>

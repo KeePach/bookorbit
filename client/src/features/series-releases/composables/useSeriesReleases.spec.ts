@@ -33,6 +33,7 @@ function response(overrides: Partial<SeriesReleasesResponse> = {}): SeriesReleas
     tracking: { seriesId: 3, tracking: true, finished: false, checkedAt: null },
     releases: [release()],
     canEdit: true,
+    license: null,
     ...overrides,
   }
 }

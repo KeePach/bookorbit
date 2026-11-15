@@ -43,6 +43,8 @@ export interface SeriesReleasesResponse {
   releases: SeriesRelease[];
   /** Whether the caller may change this series' releases. */
   canEdit: boolean;
+  /** What the last MangaBaka licensing check made of this series; null when never checked. */
+  license: SeriesLicense | null;
 }
 
 export interface SeriesReleaseInput {
@@ -112,4 +114,42 @@ export interface SeriesReleaseImportRequest {
 export interface SeriesReleaseImportResult {
   imported: number;
   skipped: { key: string; reason: string }[];
+}
+
+export type SeriesLicenseMatchedBy = "id" | "title";
+export type SeriesLicenseOverride = "always" | "never";
+
+export interface SeriesLicense {
+  /** What MangaBaka said. The effective answer also honors `override`. */
+  licensed: boolean;
+  mangabakaId: string | null;
+  matchedBy: SeriesLicenseMatchedBy | null;
+  /** English publishers, comma-joined. */
+  publishers: string | null;
+  override: SeriesLicenseOverride | null;
+  checkedAt: string;
+}
+
+export interface SeriesLicenseOverrideUpdate {
+  override: SeriesLicenseOverride | null;
+}
+
+export interface SeriesLicensingSettings {
+  /** The libraries whose series are checked against MangaBaka and auto-tracked. */
+  libraryIds: number[];
+}
+
+export interface SeriesLicensingStatus {
+  running: boolean;
+  /** Dump lines read so far while a run is underway. */
+  progressLines: number | null;
+  lastRunAt: string | null;
+  lastRunSeries: number | null;
+  lastRunLicensed: number | null;
+  lastRunError: string | null;
+}
+
+export interface SeriesLicensingOverview {
+  settings: SeriesLicensingSettings;
+  status: SeriesLicensingStatus;
 }

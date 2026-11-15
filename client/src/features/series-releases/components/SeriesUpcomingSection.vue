@@ -18,7 +18,7 @@ import SeriesReleaseDialog from './SeriesReleaseDialog.vue'
 const props = defineProps<{ seriesId: number }>()
 
 const { t } = useI18n()
-const { data, saving, load, add, update, remove, collect, updateTracking, importBackup } = useSeriesReleases(() => props.seriesId)
+const { data, saving, load, add, update, remove, collect, updateTracking, importBackup, setLicenseOverride } = useSeriesReleases(() => props.seriesId)
 
 watch(
   () => props.seriesId,
@@ -37,6 +37,32 @@ const checkedLabel = computed(() => {
   const day = tracking.value?.checkedAt ? parseLocalDay(tracking.value.checkedAt) : null
   return day ? t('seriesReleases.checked', { date: formatDate(day, { dateStyle: 'medium' }) }) : t('seriesReleases.neverChecked')
 })
+
+const license = computed(() => data.value?.license ?? null)
+/** What the override makes of the MangaBaka verdict. */
+const effectivelyLicensed = computed(() => {
+  const row = license.value
+  if (!row) return false
+  if (row.override) return row.override === 'always'
+  return row.licensed
+})
+const licenseLabel = computed(() => {
+  const row = license.value
+  if (!row) return ''
+  if (effectivelyLicensed.value) {
+    const base = t('seriesReleases.license.licensed')
+    return row.publishers ? `${base} — ${row.publishers}` : base
+  }
+  return row.matchedBy ? t('seriesReleases.license.notLicensed') : t('seriesReleases.license.noMatch')
+})
+
+async function changeOverride(value: string) {
+  try {
+    await setLicenseOverride(value === 'always' || value === 'never' ? value : null)
+  } catch (reason) {
+    toast.error(errorMessage(reason, 'seriesReleases.errors.license'))
+  }
+}
 
 const dialogOpen = ref(false)
 const editing = ref<SeriesRelease | null>(null)
@@ -152,6 +178,21 @@ async function handleBackupChosen(event: Event) {
           </RouterLink>
         </div>
         <p v-if="tracking.tracking" class="mt-0.5 text-xs text-muted-foreground">{{ checkedLabel }}</p>
+        <div v-if="license" class="mt-0.5 flex flex-wrap items-center gap-1.5" data-testid="series-license-line">
+          <p class="text-xs" :class="effectivelyLicensed ? 'text-success' : 'text-muted-foreground'">{{ licenseLabel }}</p>
+          <select
+            v-if="canEdit"
+            class="h-5 rounded border border-border bg-background px-1 text-[11px] text-foreground"
+            :value="license.override ?? ''"
+            :disabled="saving"
+            :aria-label="t('seriesReleases.license.overrideLabel')"
+            @change="changeOverride(($event.target as HTMLSelectElement).value)"
+          >
+            <option value="">{{ t('seriesReleases.license.auto') }}</option>
+            <option value="always">{{ t('seriesReleases.license.always') }}</option>
+            <option value="never">{{ t('seriesReleases.license.never') }}</option>
+          </select>
+        </div>
       </div>
 
       <div v-if="canEdit" class="flex flex-wrap items-center gap-1.5">

@@ -73,7 +73,7 @@ describe('ReleaseAgendaView', () => {
     const wrapper = await mountView()
 
     const headings = wrapper.findAll('h2').map((heading) => heading.text())
-    expect(headings).toEqual(['December 2026', 'January 2027', 'Waiting for a date'])
+    expect(headings).toEqual(['December 2026', 'January 2027', 'Waiting for a date', 'MangaBaka licensing'])
     expect(wrapper.text()).toContain('Aki Sora')
     expect(wrapper.text()).toContain('Pre-order')
     expect(wrapper.find('a[href="https://store.example/6"]').attributes('rel')).toContain('noopener')

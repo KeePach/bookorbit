@@ -1,5 +1,7 @@
 import { ref, toValue, type MaybeRefOrGetter } from 'vue'
 import type {
+  SeriesLicense,
+  SeriesLicenseOverride,
   SeriesRelease,
   SeriesReleaseCollectResult,
   SeriesReleaseImportEntry,
@@ -102,5 +104,12 @@ export function useSeriesReleases(seriesId: MaybeRefOrGetter<number | null>) {
     )
   }
 
-  return { data, loading, saving, error, load, add, update, remove, collect, updateTracking, importBackup }
+  /** The human's veto over the MangaBaka licensing verdict: 'always', 'never', or null for auto. */
+  function setLicenseOverride(override: SeriesLicenseOverride | null): Promise<SeriesLicense> {
+    return mutate(() =>
+      apiJson<SeriesLicense>(`/api/v1/series/${requireId()}/release-license`, jsonBody('PATCH', { override }), 'seriesReleases.errors.license'),
+    )
+  }
+
+  return { data, loading, saving, error, load, add, update, remove, collect, updateTracking, importBackup, setLicenseOverride }
 }

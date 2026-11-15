@@ -22,6 +22,8 @@ import { SeriesRepository } from '../series/series.repository';
 import type { CreateSeriesReleaseDto } from './dto/create-series-release.dto';
 import type { UpdateSeriesReleaseDto } from './dto/update-series-release.dto';
 import type { UpdateSeriesReleaseTrackingDto } from './dto/update-series-release-tracking.dto';
+import { SeriesLicenseRepository } from './series-license.repository';
+import { toSeriesLicense } from './series-license.service';
 import { SeriesReleaseRepository, type SeriesReleasePatch } from './series-release.repository';
 import { bumpVolume, isIsoDate, normalizeCover, normalizeHttpUrl, todayIso } from './series-release.validation';
 
@@ -64,6 +66,7 @@ export class SeriesReleaseService {
     private readonly releaseRepo: SeriesReleaseRepository,
     private readonly seriesRepo: SeriesRepository,
     private readonly libraryService: LibraryService,
+    private readonly licenseRepo: SeriesLicenseRepository,
   ) {}
 
   /**
@@ -100,12 +103,18 @@ export class SeriesReleaseService {
     const accessible = await this.libraryService.findAccessibleLibraryIds(user);
     if (!(await this.canSee(user, seriesId, accessible))) throw new NotFoundException('Series not found');
 
-    const [tracking, rows, canEdit] = await Promise.all([
+    const [tracking, rows, canEdit, licenseRow] = await Promise.all([
       this.releaseRepo.findTracking(seriesId),
       this.releaseRepo.listByStatus(seriesId, 'upcoming'),
       this.canSee(user, seriesId, await this.libraryService.findEditableLibraryIds(user)),
+      this.licenseRepo.findForSeries(seriesId),
     ]);
-    return { tracking: toSeriesReleaseTracking(seriesId, tracking), releases: rows.map(toSeriesRelease), canEdit };
+    return {
+      tracking: toSeriesReleaseTracking(seriesId, tracking),
+      releases: rows.map(toSeriesRelease),
+      canEdit,
+      license: toSeriesLicense(licenseRow),
+    };
   }
 
   async create(user: RequestUser, seriesId: number, dto: CreateSeriesReleaseDto): Promise<SeriesRelease> {

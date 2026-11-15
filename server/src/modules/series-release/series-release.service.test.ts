@@ -79,8 +79,9 @@ function makeService(options: { visible?: number[]; editable?: number[]; seriesL
     findAccessibleLibraryIds: vi.fn().mockResolvedValue(visible),
     findEditableLibraryIds: vi.fn().mockResolvedValue(editable),
   };
-  const service = new SeriesReleaseService(releaseRepo as never, seriesRepo as never, libraryService as never);
-  return { service, releaseRepo, seriesRepo, libraryService };
+  const licenseRepo = { findForSeries: vi.fn().mockResolvedValue(null) };
+  const service = new SeriesReleaseService(releaseRepo as never, seriesRepo as never, libraryService as never, licenseRepo as never);
+  return { service, releaseRepo, seriesRepo, libraryService, licenseRepo };
 }
 
 function createDto(overrides?: Partial<CreateSeriesReleaseDto>): CreateSeriesReleaseDto {

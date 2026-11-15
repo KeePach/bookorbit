@@ -14086,7 +14086,32 @@
       "collect": "Could not mark the volume as collected.",
       "tracking": "Could not change tracking for this series.",
       "import": "Could not import the backup.",
-      "duplicate": "This volume is already listed as upcoming."
+      "duplicate": "This volume is already listed as upcoming.",
+      "license": "Could not change the licensing override.",
+      "licensing": "Could not reach the licensing check."
+    },
+    "license": {
+      "licensed": "Licensed",
+      "notLicensed": "Not licensed",
+      "noMatch": "Not found on MangaBaka",
+      "auto": "Auto",
+      "always": "Always licensed",
+      "never": "Never licensed",
+      "overrideLabel": "Licensing override"
+    },
+    "licensing": {
+      "title": "MangaBaka licensing",
+      "subtitle": "Checks which series in the picked libraries have an official English release, and starts tracking the licensed ones.",
+      "run": "Check licensing now",
+      "running": "Checking… {lines} read",
+      "save": "Save libraries",
+      "saved": "Libraries saved.",
+      "started": "Licensing check started.",
+      "lastRun": "Last checked {day}: {series} series, {licensed} licensed.",
+      "lastFailed": "The last check on {day} failed.",
+      "neverRan": "Never checked yet.",
+      "credit": "Licensing data from MangaBaka.",
+      "stale": "The licensing data is over a month old."
     }
   },
   "series": {

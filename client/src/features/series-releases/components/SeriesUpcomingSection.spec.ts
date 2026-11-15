@@ -29,7 +29,13 @@ function release(overrides: Partial<SeriesRelease> = {}): SeriesRelease {
 }
 
 function response(overrides: Partial<SeriesReleasesResponse> = {}): SeriesReleasesResponse {
-  return { tracking: { seriesId: 3, tracking: true, finished: false, checkedAt: '2026-11-10' }, releases: [release()], canEdit: true, ...overrides }
+  return {
+    tracking: { seriesId: 3, tracking: true, finished: false, checkedAt: '2026-11-10' },
+    releases: [release()],
+    canEdit: true,
+    license: null,
+    ...overrides,
+  }
 }
 
 async function mountSection(body: SeriesReleasesResponse) {
@@ -52,6 +58,38 @@ describe('SeriesUpcomingSection', () => {
     expect(wrapper.findAll('[data-testid="series-release-card"]')).toHaveLength(2)
     expect(wrapper.text()).toContain('Upcoming volumes')
     expect(wrapper.text()).toContain('Vol. 7')
+  })
+
+  it('shows the licensing verdict with its publishers', async () => {
+    const wrapper = await mountSection(
+      response({
+        license: {
+          licensed: true,
+          mangabakaId: '77',
+          matchedBy: 'id',
+          publishers: 'Seven Seas',
+          override: null,
+          checkedAt: '2026-11-10T00:00:00.000Z',
+        },
+      }),
+    )
+
+    const line = wrapper.find('[data-testid="series-license-line"]')
+    expect(line.exists()).toBe(true)
+    expect(line.text()).toContain('Licensed — Seven Seas')
+    expect(line.find('select').element.value).toBe('')
+  })
+
+  it('lets the override win over the MangaBaka verdict', async () => {
+    const wrapper = await mountSection(
+      response({
+        license: { licensed: true, mangabakaId: '77', matchedBy: 'id', publishers: null, override: 'never', checkedAt: '2026-11-10T00:00:00.000Z' },
+      }),
+    )
+
+    const line = wrapper.find('[data-testid="series-license-line"]')
+    expect(line.text()).toContain('Not licensed')
+    expect(line.find('select').element.value).toBe('never')
   })
 
   it('shows nothing to a reader when the series is not followed', async () => {

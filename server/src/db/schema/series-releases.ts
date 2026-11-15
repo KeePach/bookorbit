@@ -62,3 +62,38 @@ export const seriesReleases = pgTable(
 
 export type SeriesReleaseRow = typeof seriesReleases.$inferSelect;
 export type NewSeriesRelease = typeof seriesReleases.$inferInsert;
+
+/**
+ * What the MangaBaka database said about a series the last time its dump was checked.
+ * `override` is the human's veto over a wrong title match; `autoTrackedAt` remembers that
+ * tracking was already turned on (or found on) once, so an untracked series is not re-tracked.
+ */
+export const seriesLicenses = pgTable('series_licenses', {
+  seriesId: integer('series_id')
+    .primaryKey()
+    .references(() => bookSeries.id, { onDelete: 'cascade' }),
+  licensed: boolean('licensed').notNull().default(false),
+  mangabakaId: varchar('mangabaka_id', { length: 20 }),
+  matchedBy: varchar('matched_by', { length: 10 }).$type<'id' | 'title'>(),
+  /** English publishers, comma-joined, for the series page line. */
+  publishers: text('publishers'),
+  override: varchar('override', { length: 6 }).$type<'always' | 'never'>(),
+  autoTrackedAt: timestamp('auto_tracked_at', { withTimezone: true }),
+  checkedAt: timestamp('checked_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** One row of licensing configuration and run state; `id` is always 1. */
+export const seriesLicenseSettings = pgTable('series_license_settings', {
+  id: integer('id').primaryKey().default(1),
+  /** The libraries whose series are checked and auto-tracked (the manga ones). */
+  libraryIds: integer('library_ids').array().notNull().default([]),
+  lastRunAt: timestamp('last_run_at', { withTimezone: true }),
+  lastRunSeries: integer('last_run_series'),
+  lastRunLicensed: integer('last_run_licensed'),
+  lastRunError: text('last_run_error'),
+  /** The last day the "licensing data is stale" reminder went out. */
+  staleNotifiedAt: date('stale_notified_at', { mode: 'string' }),
+});
+
+export type SeriesLicenseRow = typeof seriesLicenses.$inferSelect;
+export type SeriesLicenseSettingsRow = typeof seriesLicenseSettings.$inferSelect;
