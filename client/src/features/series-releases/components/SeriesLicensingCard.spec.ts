@@ -14,7 +14,7 @@ vi.mock('@/features/library/composables/useLibraries', async () => {
         { id: 1, name: 'Comics' },
         { id: 2, name: 'Downloaded Manga' },
       ]),
-      fetchLibraries: vi.fn(),
+      fetchLibraries: vi.fn<() => Promise<void>>(),
     }),
   }
 })
