@@ -51,7 +51,6 @@ const WIDGET_KEY_BY_TYPE: Record<WidgetType, string> = {
   'library-overview': 'libraryOverview',
   'year-projection': 'yearProjection',
   'long-wait': 'longWait',
-  'upcoming-releases': 'upcomingReleases',
 }
 
 // A widget whose Portuguese name genuinely differs from English. Assertions that a
@@ -69,6 +68,7 @@ const SHELF_KEY_BY_TYPE: Record<ScrollerType, string> = {
   'up-next-in-series': 'upNextInSeries',
   random: 'random',
   'smart-scope': 'smartScope',
+  'upcoming-releases': 'upcomingReleases',
 }
 
 function smartScopeShelf(overrides: Partial<ScrollerConfig> = {}): ScrollerConfig {

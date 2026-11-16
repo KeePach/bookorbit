@@ -17,6 +17,7 @@ import { SHELF_LAYOUT, useDashboardConfig } from '@/features/dashboard/composabl
 import { useDashboardLabels } from '@/features/dashboard/composables/useDashboardLabels'
 import { useOnboardingTour } from '@/features/onboarding/composables/useOnboardingTour'
 import { useSmartScopes } from '@/features/smart-scope/composables/useSmartScopes'
+import UpcomingReleasesShelf from '@/features/series-releases/components/UpcomingReleasesShelf.vue'
 
 const { t } = useI18n()
 const { hasPermission } = usePermissions()
@@ -164,7 +165,16 @@ onUnmounted(() => {
           <DashboardWidgetRow :key="`widgets-${dashboardRevision}`" class="animate-fade-up" />
           <div v-if="enabledScrollers.length > 0" :class="shelfLayoutClass">
             <template v-for="(shelf, index) in shelves" :key="`${dashboardRevision}-${shelf.key}`">
+              <UpcomingReleasesShelf
+                v-if="shelf.type === 'upcoming-releases'"
+                :title="shelf.title"
+                :limit="shelf.limit"
+                :rows="shelf.rows"
+                class="min-w-0 animate-fade-up"
+                :style="{ animationDelay: `${index * 100}ms` }"
+              />
               <DashboardScroller
+                v-else
                 :type="shelf.type"
                 :title="shelf.title"
                 :limit="shelf.limit"

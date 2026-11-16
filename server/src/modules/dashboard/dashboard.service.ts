@@ -157,6 +157,7 @@ export class DashboardService {
         return this.dashboardRepo.countWantToReadBooks(accessibleLibraryIds, user.id, contentFilters);
       case ScrollerType.UP_NEXT_IN_SERIES:
       case ScrollerType.RANDOM:
+      case ScrollerType.UPCOMING_RELEASES:
         return null;
     }
   }
@@ -226,6 +227,9 @@ export class DashboardService {
         return this.dashboardRepo.findUpNextInSeriesBookIds(accessibleLibraryIds, user.id, clampedLimit, contentFilters, options);
       case ScrollerType.RANDOM:
         return this.dashboardRepo.findRandomBookIds(accessibleLibraryIds, user.id, clampedLimit, contentFilters, options);
+      // Drawn on the client from the series-release overview; there are no books to select.
+      case ScrollerType.UPCOMING_RELEASES:
+        return [];
     }
   }
 }

@@ -11062,8 +11062,7 @@
         "diversityScore": "Diversity Score",
         "libraryOverview": "Library Overview",
         "yearProjection": "Year Projection",
-        "longWait": "The Long Wait",
-        "upcomingReleases": "Upcoming Volumes"
+        "longWait": "The Long Wait"
       },
       "shelfNames": {
         "recentlyAdded": "Recently Added",
@@ -11072,7 +11071,8 @@
         "wantToRead": "Want to Read",
         "upNextInSeries": "Up Next in Series",
         "random": "Discover Something New",
-        "smartScope": "Smart Scope"
+        "smartScope": "Smart Scope",
+        "upcomingReleases": "Upcoming Volumes"
       },
       "shelfLayout": {
         "title": "Shelf layout",
@@ -14099,11 +14099,13 @@
         "date": "Release date",
         "name": "Series name"
       },
-      "widget": {
-        "title": "Upcoming volumes",
+      "shelf": {
+        "announced": "{count, plural, one {# volume announced} other {# volumes announced}}",
+        "seeAll": "See all",
         "empty": "Nothing announced yet.",
-        "waiting": "{count, plural, one {# series waiting for a date} other {# series waiting for a date}}",
-        "seeAll": "See all"
+        "retry": "Retry",
+        "scrollLeft": "Scroll left",
+        "scrollRight": "Scroll right"
       }
     },
     "import": {

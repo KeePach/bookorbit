@@ -40,6 +40,7 @@ export const SCROLLER_LABELS: Record<ScrollerType, string> = {
   'recently-added': 'Recently Added',
   random: 'Discover Something New',
   'smart-scope': 'Smart Scope',
+  'upcoming-releases': 'Upcoming Volumes',
 }
 
 /** Stored configs can name shelves this client no longer has; those are dropped on read and never written back. */

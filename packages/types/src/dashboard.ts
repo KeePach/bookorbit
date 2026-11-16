@@ -8,6 +8,8 @@ export const SCROLLER_TYPE = {
   UP_NEXT_IN_SERIES: "up-next-in-series",
   RANDOM: "random",
   SMART_SCOPE: "smart-scope",
+  /** Drawn from the series-release overview on the client; it selects no books. */
+  UPCOMING_RELEASES: "upcoming-releases",
 } as const;
 
 export type ScrollerType = (typeof SCROLLER_TYPE)[keyof typeof SCROLLER_TYPE];
@@ -98,7 +100,6 @@ export const WIDGET_TYPE = {
   LIBRARY_OVERVIEW: "library-overview",
   YEAR_PROJECTION: "year-projection",
   LONG_WAIT: "long-wait",
-  UPCOMING_RELEASES: "upcoming-releases",
 } as const;
 
 export type WidgetType = (typeof WIDGET_TYPE)[keyof typeof WIDGET_TYPE];
@@ -276,8 +277,6 @@ export interface WidgetDataByType {
   "library-overview": LibraryOverviewWidgetData;
   "year-projection": YearProjectionWidgetData;
   "long-wait": LongWaitWidgetData | null;
-  /** Reads the series-release overview on the client; the batch carries nothing for it. */
-  "upcoming-releases": null;
 }
 
 export const DASHBOARD_WIDGET_BATCH_MAX = WIDGET_TYPES.length;

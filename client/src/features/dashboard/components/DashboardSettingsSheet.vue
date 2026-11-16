@@ -92,6 +92,7 @@ const ALL_TYPES: ScrollerType[] = [
   'recently-added',
   'random',
   'smart-scope',
+  'upcoming-releases',
 ]
 
 function addScroller() {

@@ -21,7 +21,6 @@ const WIDGET_NAME_KEYS: Record<WidgetType, WidgetNameKey> = {
   'library-overview': 'libraryOverview',
   'year-projection': 'yearProjection',
   'long-wait': 'longWait',
-  'upcoming-releases': 'upcomingReleases',
 }
 
 const SHELF_NAME_KEYS: Record<ScrollerType, ShelfNameKey> = {
@@ -32,6 +31,7 @@ const SHELF_NAME_KEYS: Record<ScrollerType, ShelfNameKey> = {
   'up-next-in-series': 'upNextInSeries',
   random: 'random',
   'smart-scope': 'smartScope',
+  'upcoming-releases': 'upcomingReleases',
 }
 
 export function useDashboardLabels() {
