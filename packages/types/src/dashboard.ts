@@ -98,6 +98,7 @@ export const WIDGET_TYPE = {
   LIBRARY_OVERVIEW: "library-overview",
   YEAR_PROJECTION: "year-projection",
   LONG_WAIT: "long-wait",
+  UPCOMING_RELEASES: "upcoming-releases",
 } as const;
 
 export type WidgetType = (typeof WIDGET_TYPE)[keyof typeof WIDGET_TYPE];
@@ -275,6 +276,8 @@ export interface WidgetDataByType {
   "library-overview": LibraryOverviewWidgetData;
   "year-projection": YearProjectionWidgetData;
   "long-wait": LongWaitWidgetData | null;
+  /** Reads the series-release overview on the client; the batch carries nothing for it. */
+  "upcoming-releases": null;
 }
 
 export const DASHBOARD_WIDGET_BATCH_MAX = WIDGET_TYPES.length;

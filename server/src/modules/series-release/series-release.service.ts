@@ -77,26 +77,59 @@ export class SeriesReleaseService {
     const libraryIds = await this.libraryService.findAccessibleLibraryIds(user);
     if (libraryIds.length === 0) return { series: [] };
 
-    const tracked = await this.releaseRepo.listTracked(libraryIds, user.isSuperuser ? undefined : user.contentFilters);
-    const open = await this.releaseRepo.listOpenForSeries(tracked.map((row) => row.seriesId));
+    const contentFilters = user.isSuperuser ? undefined : user.contentFilters;
+    const tracked = await this.releaseRepo.listTracked(libraryIds, contentFilters);
+    const seriesIds = tracked.map((row) => row.seriesId);
+    const [open, facts] = await Promise.all([
+      this.releaseRepo.listOpenForSeries(seriesIds),
+      this.releaseRepo.listSeriesFacts(seriesIds, libraryIds, contentFilters),
+    ]);
     const releasesBySeries = new Map<number, SeriesReleaseOverviewRelease[]>();
     for (const row of open) {
       const list = releasesBySeries.get(row.seriesId) ?? [];
-      list.push({ id: row.id, volume: row.volume, releaseDate: row.releaseDate, storeUrl: row.storeUrl, note: row.note });
+      list.push({
+        id: row.id,
+        volume: row.volume,
+        releaseDate: row.releaseDate,
+        storeUrl: row.storeUrl,
+        note: row.note,
+        coverVersion: row.hasCover ? row.updatedAt.getTime() : null,
+      });
       releasesBySeries.set(row.seriesId, list);
     }
 
-    const series: SeriesReleaseOverviewSeries[] = tracked.map((row) => ({
-      seriesId: row.seriesId,
-      name: row.name,
-      finished: row.finished,
-      // The day tracking started counts as a check, as in toSeriesReleaseTracking.
-      checkedAt: row.checkedAt ?? todayIso(row.createdAt),
-      releases: releasesBySeries.get(row.seriesId) ?? [],
-    }));
+    const series: SeriesReleaseOverviewSeries[] = tracked.map((row) => {
+      const fact = facts.get(row.seriesId);
+      return {
+        seriesId: row.seriesId,
+        name: row.name,
+        finished: row.finished,
+        // The day tracking started counts as a check, as in toSeriesReleaseTracking.
+        checkedAt: row.checkedAt ?? todayIso(row.createdAt),
+        releases: releasesBySeries.get(row.seriesId) ?? [],
+        coverBookId: fact?.coverBookId ?? null,
+        libraryIds: fact?.libraryIds ?? [],
+        licensed: fact?.licensed ?? null,
+      };
+    });
     const nearest = (entry: SeriesReleaseOverviewSeries) => entry.releases[0]?.releaseDate ?? '9999-99-99';
     series.sort((a, b) => nearest(a).localeCompare(nearest(b)) || a.name.localeCompare(b.name));
     return { series };
+  }
+
+  /**
+   * A release's own cover as bytes and type, decoded from its stored data URL, or the https
+   * address to send the browser to. Null when the volume has none; 404 when it cannot be seen.
+   */
+  async cover(user: RequestUser, releaseId: number): Promise<{ redirect: string } | { type: string; body: Buffer; etag: string } | null> {
+    const row = await this.releaseRepo.findCover(releaseId);
+    const accessible = row ? await this.libraryService.findAccessibleLibraryIds(user) : [];
+    if (!row || !(await this.canSee(user, row.seriesId, accessible))) throw new NotFoundException('Release not found');
+    if (!row.cover) return null;
+    if (/^https:\/\//i.test(row.cover)) return { redirect: row.cover };
+    const match = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/i.exec(row.cover);
+    if (!match) return null;
+    return { type: match[1].toLowerCase(), body: Buffer.from(match[2], 'base64'), etag: `"${row.updatedAt.getTime()}"` };
   }
 
   async get(user: RequestUser, seriesId: number): Promise<SeriesReleasesResponse> {

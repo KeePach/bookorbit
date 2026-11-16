@@ -71,7 +71,16 @@ describe('sidebar nav registry', () => {
   })
 
   it('shows only ungated destinations to a user with no permissions', () => {
-    expect(allowedIds(makeContext())).toEqual(['dashboard', 'statistics', 'reading-history', 'achievements', 'authors', 'series', 'annotations'])
+    expect(allowedIds(makeContext())).toEqual([
+      'dashboard',
+      'statistics',
+      'reading-history',
+      'achievements',
+      'authors',
+      'series',
+      'series-releases',
+      'annotations',
+    ])
   })
 
   it('places Dashboard, Book Dock, Requests and Tools in the primary zone, above the entity sections', () => {

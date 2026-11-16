@@ -8,6 +8,7 @@ import { usePermissions } from '@/features/auth/composables/usePermissions'
 import { useBookDockSummary } from '@/features/book-dock/composables/useBookDockSummary'
 import { useBrowseCounts } from '@/composables/useBrowseCounts'
 import { useBookRequestVisibility } from '@/features/book-requests/composables/useBookRequestVisibility'
+import { upcomingNavEntry } from '@/features/series-releases/lib/upcoming-nav-entry'
 
 /** `primary` is pinned on top; useSidebarLayout places the others among the list sections in the user's order. */
 export const SIDEBAR_ZONE_IDS = ['primary', 'browse', 'reading'] as const
@@ -183,6 +184,7 @@ export const SIDEBAR_NAV_REGISTRY: readonly SidebarNavEntry[] = [
     isActive: (route) => route.name === 'series' || route.name === 'series-detail',
     badge: browseBadge('series'),
   },
+  upcomingNavEntry,
   {
     id: 'annotations',
     labelKey: 'components.appHeader.annotations',

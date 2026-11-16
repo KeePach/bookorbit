@@ -66,6 +66,8 @@ function makeService(options: { visible?: number[]; editable?: number[]; seriesL
     collect: vi.fn(),
     listTracked: vi.fn().mockResolvedValue([]),
     listOpenForSeries: vi.fn().mockResolvedValue([]),
+    listSeriesFacts: vi.fn().mockResolvedValue(new Map()),
+    findCover: vi.fn().mockResolvedValue(null),
   };
   const seriesRepo = {
     // Series 3 lives in `seriesLibraries`; every other id does not exist.
@@ -455,6 +457,62 @@ describe('SeriesReleaseService', () => {
 
       await expect(service.overview(makeUser())).resolves.toEqual({ series: [] });
       expect(releaseRepo.listTracked).not.toHaveBeenCalled();
+    });
+
+    it('adds the browse facts: cover versions, fallback cover, libraries and licensing', async () => {
+      const { service, releaseRepo } = makeService();
+      const edited = new Date('2026-11-10T12:00:00Z');
+      releaseRepo.listTracked.mockResolvedValue([
+        { seriesId: 3, name: 'Beta', finished: false, checkedAt: '2026-11-01', createdAt: NOW },
+        { seriesId: 5, name: 'Alpha', finished: false, checkedAt: '2026-11-01', createdAt: NOW },
+      ]);
+      releaseRepo.listOpenForSeries.mockResolvedValue([
+        { id: 1, seriesId: 3, volume: '6', releaseDate: '2026-12-19', storeUrl: null, note: null, hasCover: true, updatedAt: edited },
+        { id: 2, seriesId: 3, volume: '7', releaseDate: null, storeUrl: null, note: null, hasCover: false, updatedAt: edited },
+      ]);
+      releaseRepo.listSeriesFacts.mockResolvedValue(new Map([[3, { libraryIds: [1, 2], coverBookId: 40, licensed: true }]]));
+
+      const result = await service.overview(makeUser());
+
+      expect(releaseRepo.listSeriesFacts).toHaveBeenCalledWith([3, 5], [1, 2], EMPTY_CONTENT_FILTER_RULES);
+      expect(result.series[0]).toMatchObject({ seriesId: 3, coverBookId: 40, libraryIds: [1, 2], licensed: true });
+      expect(result.series[0].releases.map((release) => release.coverVersion)).toEqual([edited.getTime(), null]);
+      expect(result.series[1]).toMatchObject({ seriesId: 5, coverBookId: null, libraryIds: [], licensed: null });
+    });
+  });
+
+  describe('cover', () => {
+    const PNG = 'data:image/png;base64,iVBORw0KGgo=';
+
+    it('decodes a stored data URL into bytes with its type and a version tag', async () => {
+      const { service, releaseRepo } = makeService();
+      releaseRepo.findCover.mockResolvedValue({ seriesId: 3, cover: PNG, updatedAt: NOW });
+
+      const image = await service.cover(makeUser(), 1);
+
+      expect(image).toEqual({ type: 'image/png', body: Buffer.from('iVBORw0KGgo=', 'base64'), etag: `"${NOW.getTime()}"` });
+    });
+
+    it('sends an https cover on to its address', async () => {
+      const { service, releaseRepo } = makeService();
+      releaseRepo.findCover.mockResolvedValue({ seriesId: 3, cover: 'https://img.example/6.jpg', updatedAt: NOW });
+
+      await expect(service.cover(makeUser(), 1)).resolves.toEqual({ redirect: 'https://img.example/6.jpg' });
+    });
+
+    it('answers null for a volume without a cover', async () => {
+      const { service, releaseRepo } = makeService();
+      releaseRepo.findCover.mockResolvedValue({ seriesId: 3, cover: null, updatedAt: NOW });
+
+      await expect(service.cover(makeUser(), 1)).resolves.toBeNull();
+    });
+
+    it('hides volumes that do not exist or whose series is out of sight', async () => {
+      const { service, releaseRepo } = makeService();
+      await expect(service.cover(makeUser(), 1)).rejects.toBeInstanceOf(NotFoundException);
+
+      releaseRepo.findCover.mockResolvedValue({ seriesId: 99, cover: PNG, updatedAt: NOW });
+      await expect(service.cover(makeUser(), 1)).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 });

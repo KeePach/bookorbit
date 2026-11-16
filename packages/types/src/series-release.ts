@@ -71,7 +71,13 @@ export interface SeriesReleaseTrackingUpdate {
 }
 
 /** One upcoming volume in the overview. Covers stay out so the whole answer loads in one small request. */
-export type SeriesReleaseOverviewRelease = Pick<SeriesRelease, "id" | "volume" | "releaseDate" | "storeUrl" | "note">;
+export interface SeriesReleaseOverviewRelease extends Pick<SeriesRelease, "id" | "volume" | "releaseDate" | "storeUrl" | "note"> {
+  /**
+   * Set when the volume has its own cover, served at `/api/v1/series-releases/{id}/cover`;
+   * the number changes whenever the entry does, so it doubles as the cache-buster.
+   */
+  coverVersion?: number | null;
+}
 
 export interface SeriesReleaseOverviewSeries {
   seriesId: number;
@@ -81,6 +87,12 @@ export interface SeriesReleaseOverviewSeries {
   checkedAt: string | null;
   /** Nearest date first, volumes without a date last. */
   releases: SeriesReleaseOverviewRelease[];
+  /** The latest volume the caller owns, whose cover stands in when a release has none. */
+  coverBookId?: number | null;
+  /** The caller's libraries that hold this series. */
+  libraryIds?: number[];
+  /** The licensing verdict with any override applied; null when never checked. */
+  licensed?: boolean | null;
 }
 
 /** Every tracked series the caller can see: grid badges, the agenda page and the calendar read this. */

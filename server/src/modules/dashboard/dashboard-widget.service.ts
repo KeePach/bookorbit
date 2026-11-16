@@ -424,6 +424,7 @@ export class DashboardWidgetService implements OnModuleInit, OnModuleDestroy {
     'long-wait': (user) => this.getLongWait(user),
     'diversity-score': (user) => this.getDiversityScore(user),
     'reading-rhythm': (user) => this.getReadingRhythm(user),
+    'upcoming-releases': () => Promise.resolve(null),
   };
 
   /**

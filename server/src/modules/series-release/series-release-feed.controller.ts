@@ -1,5 +1,7 @@
-import { Controller, Get, Header, Query, UnauthorizedException } from '@nestjs/common';
+import { Controller, Get, Header, Headers, NotFoundException, Param, ParseIntPipe, Query, Res, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { RouteConfig } from '@nestjs/platform-fastify';
+import type { FastifyReply } from 'fastify';
 
 import type { SeriesReleaseCalendarInfo, SeriesReleasesOverviewResponse } from '@bookorbit/types';
 
@@ -22,6 +24,30 @@ export class SeriesReleaseFeedController {
   @Get('overview')
   overview(@CurrentUser() user: RequestUser): Promise<SeriesReleasesOverviewResponse> {
     return this.releaseService.overview(user);
+  }
+
+  /** A volume's own cover for the browse page and dashboard; `?v=` busts the cache on change. */
+  @Get(':releaseId/cover')
+  @RouteConfig({ compress: false })
+  async cover(
+    @CurrentUser() user: RequestUser,
+    @Param('releaseId', ParseIntPipe) releaseId: number,
+    @Res() reply: FastifyReply,
+    @Query('v') version?: string,
+    @Headers('if-none-match') ifNoneMatch?: string,
+  ): Promise<void> {
+    const image = await this.releaseService.cover(user, releaseId);
+    if (!image) throw new NotFoundException('This volume has no cover');
+    if ('redirect' in image) {
+      reply.redirect(image.redirect, 302);
+      return;
+    }
+    const cacheControl = version ? 'private, max-age=31536000, immutable' : 'private, max-age=3600';
+    if (ifNoneMatch === image.etag) {
+      reply.status(304).header('Cache-Control', cacheControl).header('ETag', image.etag).send();
+      return;
+    }
+    reply.header('Cache-Control', cacheControl).header('ETag', image.etag).type(image.type).send(image.body);
   }
 
   /** Where this user's calendar lives. The client puts its own origin in front. */

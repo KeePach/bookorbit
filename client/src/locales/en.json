@@ -11062,7 +11062,8 @@
         "diversityScore": "Diversity Score",
         "libraryOverview": "Library Overview",
         "yearProjection": "Year Projection",
-        "longWait": "The Long Wait"
+        "longWait": "The Long Wait",
+        "upcomingReleases": "Upcoming Volumes"
       },
       "shelfNames": {
         "recentlyAdded": "Recently Added",
@@ -14060,7 +14061,7 @@
       "check": "Check"
     },
     "agenda": {
-      "title": "Upcoming releases",
+      "title": "Upcoming",
       "subtitle": "Every volume you are waiting for, across all tracked series.",
       "allLink": "All upcoming",
       "copyLink": "Copy calendar link",
@@ -14070,6 +14071,40 @@
       "waiting": "Waiting for a date",
       "noVolume": "No volume listed yet",
       "empty": "No upcoming volumes yet. Track a series from its page and they gather here."
+    },
+    "upcoming": {
+      "facts": "{volumes, plural, one {# card} other {# cards}} · {series, plural, one {# tracked series} other {# tracked series}}",
+      "searchPlaceholder": "Search series or volume",
+      "noMatch": "Nothing upcoming matches these filters.",
+      "clear": "Clear filters",
+      "next": "Next: {volume}",
+      "nextUnknown": "Next volume",
+      "filters": {
+        "label": "Release status",
+        "all": "All",
+        "out": "Out",
+        "soon": "Soon",
+        "scheduled": "Scheduled",
+        "waiting": "No date",
+        "check": "Check due"
+      },
+      "licensed": {
+        "label": "Licensing",
+        "all": "All",
+        "yes": "Licensed",
+        "no": "Not licensed"
+      },
+      "sort": {
+        "label": "Sort by",
+        "date": "Release date",
+        "name": "Series name"
+      },
+      "widget": {
+        "title": "Upcoming volumes",
+        "empty": "Nothing announced yet.",
+        "waiting": "{count, plural, one {# series waiting for a date} other {# series waiting for a date}}",
+        "seeAll": "See all"
+      }
     },
     "import": {
       "done": "{imported, plural, one {# entry} other {# entries}} imported, {skipped} skipped.",

@@ -1,17 +1,20 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, count, eq, exists, inArray, isNotNull, lte, notExists, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, exists, inArray, isNotNull, lte, notExists, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 
 import type { ContentFilterRules, SeriesReleaseStatus } from '@bookorbit/types';
 
 import { buildContentFilterClauses } from '../../common/utils/content-filter-sql.utils';
 import { isUniqueViolation } from '../../common/utils/db-error.utils';
+import { seriesIndexOrderBy } from '../../common/utils/series-index-sql.utils';
 import { DB } from '../../db';
 import * as schema from '../../db/schema';
 import {
+  bookMetadata,
   bookSeries,
   bookSeriesMemberships,
   books,
+  seriesLicenses,
   seriesReleases,
   seriesReleaseTracking,
   type NewSeriesRelease,
@@ -20,6 +23,23 @@ import {
 } from '../../db/schema';
 
 type Db = NodePgDatabase<typeof schema>;
+
+export interface OpenReleaseRow {
+  id: number;
+  seriesId: number;
+  volume: string;
+  releaseDate: string | null;
+  storeUrl: string | null;
+  note: string | null;
+  hasCover: boolean;
+  updatedAt: Date;
+}
+
+export interface SeriesFacts {
+  libraryIds: number[];
+  coverBookId: number | null;
+  licensed: boolean | null;
+}
 
 export type SeriesReleaseInsert = Pick<NewSeriesRelease, 'seriesId' | 'volume' | 'releaseDate' | 'storeUrl' | 'note' | 'cover' | 'createdBy'>;
 export type SeriesReleasePatch = Partial<Pick<NewSeriesRelease, 'volume' | 'releaseDate' | 'storeUrl' | 'note' | 'cover' | 'status'>>;
@@ -79,14 +99,77 @@ export class SeriesReleaseRepository {
       .orderBy(asc(bookSeries.name));
   }
 
-  /** The upcoming volumes of several series in one query; nearest date first within each. */
-  listOpenForSeries(seriesIds: number[]): Promise<SeriesReleaseRow[]> {
+  /**
+   * The upcoming volumes of several series in one query; nearest date first within each.
+   * Covers stay behind (they can be large data URLs): only whether one exists comes along.
+   */
+  listOpenForSeries(seriesIds: number[]): Promise<OpenReleaseRow[]> {
     if (seriesIds.length === 0) return Promise.resolve([]);
     return this.db
-      .select()
+      .select({
+        id: seriesReleases.id,
+        seriesId: seriesReleases.seriesId,
+        volume: seriesReleases.volume,
+        releaseDate: seriesReleases.releaseDate,
+        storeUrl: seriesReleases.storeUrl,
+        note: seriesReleases.note,
+        hasCover: sql<boolean>`${seriesReleases.cover} is not null`,
+        updatedAt: seriesReleases.updatedAt,
+      })
       .from(seriesReleases)
       .where(and(inArray(seriesReleases.seriesId, seriesIds), eq(seriesReleases.status, 'upcoming')))
       .orderBy(sql`${seriesReleases.releaseDate} asc nulls last`, asc(seriesReleases.id));
+  }
+
+  /**
+   * For the browse page: which of the caller's libraries hold each series, the latest volume
+   * they own (its cover stands in for releases without one) and the licensing verdict.
+   */
+  async listSeriesFacts(seriesIds: number[], libraryIds: number[], contentFilters?: ContentFilterRules): Promise<Map<number, SeriesFacts>> {
+    const facts = new Map<number, SeriesFacts>();
+    if (seriesIds.length === 0 || libraryIds.length === 0) return facts;
+    const filterClauses = contentFilters ? buildContentFilterClauses(contentFilters, this.db) : [];
+    const [volumes, licenses] = await Promise.all([
+      this.db
+        .select({
+          seriesId: bookSeriesMemberships.seriesId,
+          bookId: books.id,
+          libraryId: books.libraryId,
+          hasCover: sql<boolean>`${bookMetadata.coverSource} is not null`,
+        })
+        .from(bookSeriesMemberships)
+        .innerJoin(books, eq(books.id, bookSeriesMemberships.bookId))
+        .innerJoin(bookMetadata, eq(bookMetadata.bookId, books.id))
+        .where(and(inArray(bookSeriesMemberships.seriesId, seriesIds), inArray(books.libraryId, libraryIds), ...filterClauses))
+        .orderBy(bookSeriesMemberships.seriesId, ...seriesIndexOrderBy(bookSeriesMemberships.seriesIndex, 'DESC'), desc(books.addedAt)),
+      this.db
+        .select({ seriesId: seriesLicenses.seriesId, licensed: seriesLicenses.licensed, override: seriesLicenses.override })
+        .from(seriesLicenses)
+        .where(inArray(seriesLicenses.seriesId, seriesIds)),
+    ]);
+    for (const row of volumes) {
+      const entry = facts.get(row.seriesId) ?? { libraryIds: [], coverBookId: null, licensed: null };
+      if (!entry.libraryIds.includes(row.libraryId)) entry.libraryIds.push(row.libraryId);
+      // Rows come latest volume first, so the first one with a cover wins.
+      if (entry.coverBookId === null && row.hasCover) entry.coverBookId = row.bookId;
+      facts.set(row.seriesId, entry);
+    }
+    for (const row of licenses) {
+      const entry = facts.get(row.seriesId);
+      if (!entry) continue;
+      entry.licensed = row.override ? row.override === 'always' : row.licensed;
+    }
+    return facts;
+  }
+
+  /** One release's stored cover and the series it belongs to, for the visibility check. */
+  async findCover(id: number): Promise<{ seriesId: number; cover: string | null; updatedAt: Date } | null> {
+    const [row] = await this.db
+      .select({ seriesId: seriesReleases.seriesId, cover: seriesReleases.cover, updatedAt: seriesReleases.updatedAt })
+      .from(seriesReleases)
+      .where(eq(seriesReleases.id, id))
+      .limit(1);
+    return row ?? null;
   }
 
   async findTracking(seriesId: number): Promise<SeriesReleaseTrackingRow | null> {

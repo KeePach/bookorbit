@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { useTrackedRelease, type TrackedReleaseKind } from '../composables/useTrackedRelease'
+import { useTrackedRelease } from '../composables/useTrackedRelease'
+import { FRAME_CLASSES } from '../lib/release-style'
 
 const props = defineProps<{
   /** Null or undefined for a book that belongs to no series: nothing renders. */
@@ -14,20 +15,8 @@ const { kind } = useTrackedRelease(
   () => [props.seriesId, ...(props.seriesIds ?? [])],
   () => props.now,
 )
-
-/**
- * A colored frame around the whole cover, so a tracked series stands out in the
- * grid; the pill badge next to it carries the date. Solid for dated states,
- * dashed when there is no date yet (amber when a check is due).
- */
-const FRAME_CLASSES: Record<TrackedReleaseKind, string> = {
-  today: 'border-emerald-400',
-  soon: 'border-amber-400',
-  overdue: 'border-red-500',
-  scheduled: 'border-sky-400',
-  check: 'border-dashed border-amber-400',
-  undated: 'border-dashed border-neutral-400/80',
-}
+// A colored frame around the whole cover, so a tracked series stands out in the grid;
+// the pill badge next to it carries the date.
 </script>
 
 <template>
