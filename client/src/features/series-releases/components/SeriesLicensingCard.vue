@@ -109,7 +109,7 @@ onMounted(() => {
           {{ t('seriesReleases.licensing.save') }}
         </Button>
       </div>
-      <p class="mt-1 text-[10px] text-muted-foreground/80">{{ t('seriesReleases.licensing.credit') }}</p>
+      <p class="mt-1 text-[10px] text-muted-foreground">{{ t('seriesReleases.licensing.credit') }}</p>
     </template>
   </section>
 </template>
