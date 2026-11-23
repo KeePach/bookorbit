@@ -58,6 +58,16 @@ Updates.releaseUnreadLinks = function(_client, items)
     return #items
 end
 Updates.deps.remove = function(path) table.insert(removed, path) end
+local synced, pending_results = {}, {}
+Updates.syncToServer = function(_client, results)
+    table.insert(synced, results)
+    return 0, 0
+end
+Updates.applyPendingDeviceChanges = function()
+    local results = pending_results
+    pending_results = {}
+    return results
+end
 
 local Store = require("bookorbit_fork_store")
 local UI = require("bookorbit_fork_updates_ui")
@@ -66,7 +76,7 @@ local client = { server_url = "http://server", username = "reader", request = fu
 local plugin = { newClient = function() return client end }
 
 local function reset()
-    shown, closed, installs, downloads, removed, released = {}, {}, {}, {}, {}, {}
+    shown, closed, installs, downloads, removed, released, synced = {}, {}, {}, {}, {}, {}, {}
 end
 
 local function lastShown(kind)
@@ -82,6 +92,13 @@ assert(#shown == 0 and #downloads == 0, "an automatic run without chosen librari
 UI.run(plugin, { manual = true })
 assert(lastShown("info").text:find("Choose the libraries", 1, true), "a manual run explains what is missing")
 
+-- Updates that arrived over USB are applied after any sync, with no library chosen, and BookOrbit hears.
+reset()
+pending_results = { { reopened = true, path = "/b/Usb.epub", title = "Usb Fic", bookId = 1, hash = "u", percent = 0.9 } }
+UI.run(plugin)
+assert(#synced == 1 and synced[1][1].path == "/b/Usb.epub", "the USB update is synced to BookOrbit")
+assert(lastShown("info").text:find("↻ Usb Fic", 1, true), "and listed as reopened")
+
 local store = Store.open(client)
 store.account.update_libraries = { 7 }
 store.save()
@@ -95,6 +112,7 @@ found = {
 UI.run(plugin)
 assert(#installs == 2, "both closed books are replaced")
 assert(#released == 2, "their old links are offered for release")
+assert(#synced == 1 and #synced[1] == 2, "both results are synced to BookOrbit in one go")
 local text = lastShown("info").text
 assert(text:find("↻ Fic", 1, true) and text:find("• Other", 1, true), "the summary names each book, by file name when it has no title")
 assert(text:find("was finished, now reading", 1, true), "the ↻ marker is explained")
@@ -117,6 +135,7 @@ assert(confirm and confirm.text:find("Open Fic", 1, true), "the user is asked ab
 assert(#downloads == 1 and #installs == 0, "the copy is downloaded first, nothing is replaced yet")
 confirm.ok_callback()
 assert(reloads == 1 and #installs == 1 and installs[1] == "/b/Open.epub", "accepting replaces the book while the reader reloads it")
+assert(#synced[#synced] == 1, "the open book is synced to BookOrbit before the reader reopens it")
 assert(released[1] == "/b/Open.epub", "its old link is offered for release")
 assert(lastShown("info").text:find("Open Fic", 1, true), "the summary includes the open book")
 

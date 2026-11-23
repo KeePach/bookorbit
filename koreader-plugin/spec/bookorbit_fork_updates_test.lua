@@ -181,7 +181,8 @@ assert(readAll(temp) == nil and readAll(FIC .. ".bookorbit-old") == nil, "no tem
 assert(result.reopened == true, "a book finished before BookOrbit's file changed is reported as reopened")
 local sidecar = sidecars[FIC]
 assert(sidecar.summary.status == "reading", "the finished book is back to reading")
-assert(math.abs(sidecar.percent_finished - 15 / 17) < 1e-9, "the percentage is scaled by the size change")
+assert(math.abs(sidecar.percent_finished - 15 / 17) < 1e-4, "the percentage is scaled by the size change, to 4 decimals")
+assert(result.percent == sidecar.percent_finished and result.bookId == 10 and result.hash == "bookorbit-copy-v2", "the install reports what to tell BookOrbit")
 assert(sidecar.partial_md5_checksum == "bookorbit-copy-v2", "the sidecar's cached hash is the new one")
 assert(luasettings_files[baseline_file].files[FIC].size == 17, "fanficupdate's baseline moves to the new size")
 assert(state_calls[1][1] == "repair" and state_calls[1][2] == FIC and state_calls[1][3] == "calibre-copy-v1" and state_calls[1][4] == "bookorbit-copy-v2",
@@ -222,7 +223,7 @@ sidecars[FIC] = { summary = { status = "reading" }, percent_finished = 0.5 }
 pending = Updates.find(server.client, account, { 7 })
 result = assert(Updates.install(account, pending[1], assert(Updates.download(server.client, pending[1]))))
 assert(result.reopened == false and sidecars[FIC].summary.status == "reading", "a book in progress keeps its status")
-assert(math.abs(sidecars[FIC].percent_finished - 0.5 * 15 / 24) < 1e-9, "its percentage is scaled to the longer copy")
+assert(math.abs(sidecars[FIC].percent_finished - 0.5 * 15 / 24) < 1e-4, "its percentage is scaled to the longer copy")
 
 -- A download whose hash does not match is thrown away.
 writeAll(FIC, "calibre-copy-v5")
@@ -312,7 +313,7 @@ local zipped_item
 for _, candidate in ipairs(pending) do if candidate.path == ZIPPED then zipped_item = candidate end end
 result = assert(Updates.install(account, zipped_item, assert(Updates.download(server.client, zipped_item))))
 assert(result.reopened == true and sidecars[ZIPPED].summary.status == "reading", "the finished book with a new chapter is reopened")
-assert(math.abs(sidecars[ZIPPED].percent_finished - 0.9) < 1e-9, "100% of the old text is 90% of the new one")
+assert(math.abs(sidecars[ZIPPED].percent_finished - 0.9) < 1e-4, "100% of the old text is 90% of the new one")
 assert(account.paths[ZIPPED].textSize == 1000, "the index records the chapter text of the new copy")
 
 -- A swap that brings the same chapter text keeps a finished book finished, even on a later day.
@@ -330,6 +331,55 @@ for _, candidate in ipairs(pending) do if candidate.path == SAME then same_item 
 result = assert(Updates.install(account, same_item, assert(Updates.download(server.client, same_item))))
 assert(result.reopened == false and sidecars[SAME].summary.status == "complete" and sidecars[SAME].percent_finished == 1.0,
     "a repackaged copy with the same chapters stays finished at 100%")
+assert(result.percent == nil, "an unchanged percentage is not reported for upload")
+
+-- BookOrbit hears about every change: reopened books first, then each changed percentage with the
+-- position, so its copy is never ahead of the book.
+local calls = {}
+local sync_client = {
+    request = function(_self, method, path, body)
+        table.insert(calls, { "request", method, path, body })
+        return { reopened = body.bookIds }
+    end,
+    updateProgress = function(_self, digest, percentage, position, timestamp)
+        table.insert(calls, { "progress", digest, percentage, position, timestamp })
+        return { document = digest }
+    end,
+}
+local reopened_count, uploaded = Updates.syncToServer(sync_client, {
+    { reopened = true, bookId = 10, hash = "h1", percent = 0.9, position = "/body/DocFragment[3]/body/p[2]/text().0" },
+    { reopened = false, bookId = 20, hash = "h2", percent = 0.45 },
+    { reopened = false, bookId = 30, hash = "h3" },
+    { reopened = true, bookId = 10, hash = "h1" },
+})
+assert(reopened_count == 1 and uploaded == 2, "one book reopened, two percentages uploaded")
+assert(calls[1][1] == "request" and calls[1][3] == Updates.REOPEN_PATH and #calls[1][4].bookIds == 1 and calls[1][4].bookIds[1] == 10,
+    "the reopen goes first, once per book")
+assert(calls[2][1] == "progress" and calls[2][2] == "h1" and calls[2][3] == 0.9 and calls[2][4]:find("DocFragment", 1, true),
+    "the new percentage is uploaded with KOReader's position")
+assert(type(calls[2][5]) == "number", "with a fresh timestamp")
+assert(calls[3][2] == "h2" and calls[3][4] == nil, "a book without a saved position still gets its percentage")
+
+-- Updates that arrived over USB wait for the sync to end, then apply; the open book keeps waiting.
+local PENDING = ROOT .. "/Fanfic/Pending - Author.epub"
+local OPEN = ROOT .. "/Fanfic/Open - Author.epub"
+writeAll(PENDING, "x")
+writeAll(OPEN, "y")
+sidecars[PENDING] = { summary = { status = "complete" }, percent_finished = 1.0, last_xpointer = "/body/DocFragment[9]" }
+sidecars[OPEN] = { summary = { status = "complete" }, percent_finished = 1.0 }
+local device_account = { paths = {}, pending_reopen = {
+    [PENDING] = { oldText = 900, newText = 1000, hash = "usb-hash", bookId = 70 },
+    [OPEN] = { oldText = 900, newText = 1000, hash = "usb-open", bookId = 80 },
+    [ROOT .. "/gone.epub"] = { oldText = 1, newText = 2, hash = "x", bookId = 90 },
+} }
+local applied = Updates.applyPendingDeviceChanges(device_account, OPEN)
+assert(#applied == 1 and applied[1].path == PENDING and applied[1].bookId == 70 and applied[1].hash == "usb-hash", "the closed book is applied")
+assert(applied[1].reopened == true and math.abs(applied[1].percent - 0.9) < 1e-4 and applied[1].position == "/body/DocFragment[9]",
+    "it is reopened at 90% with its position")
+assert(sidecars[PENDING].summary.status == "reading" and sidecars[PENDING].partial_md5_checksum == "usb-hash", "its sidecar is updated")
+assert(device_account.pending_reopen[OPEN] ~= nil and sidecars[OPEN].summary.status == "complete", "the open book keeps waiting")
+assert(device_account.pending_reopen[PENDING] == nil and device_account.pending_reopen[ROOT .. "/gone.epub"] == nil,
+    "applied and vanished books are cleared")
 
 os.execute("rm -rf '" .. ROOT .. "'")
 print("bookorbit_fork_updates_test: ok")

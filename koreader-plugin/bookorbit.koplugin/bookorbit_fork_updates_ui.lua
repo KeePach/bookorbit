@@ -56,6 +56,11 @@ local function refreshLibraryViews(paths)
         for _, path in ipairs(paths) do
             pcall(function() require("ui/widget/booklist").resetBookInfoCache(path) end)
             UIManager:broadcastEvent(Event:new("InvalidateMetadataCache", path))
+            -- Bookshelf keeps its own status and progress cache, as the fanficupdate plugin knew.
+            local repo = package.loaded["lib/bookshelf_book_repository"]
+            if type(repo) == "table" and type(repo.invalidateProgressCache) == "function" then
+                pcall(repo.invalidateProgressCache, path)
+            end
             UIManager:broadcastEvent(Event:new("BookMetadataChanged", { filepath = path }))
         end
         local FileManager = require("apps/filemanager/filemanager")
@@ -72,7 +77,12 @@ local function summary(lines, failures)
     return text
 end
 
-local function askAboutOpenBook(plugin, item, temp, on_done)
+local function line(result, item)
+    local name = (item and item.title ~= "" and item.title) or result.title or (item and titleOf(item)) or titleOf({ path = result.path or "" })
+    return (result.reopened and "↻ " or "• ") .. name
+end
+
+local function askAboutOpenBook(plugin, client, item, temp, on_done)
     local ConfirmBox = require("ui/widget/confirmbox")
     show(ConfirmBox:new{
         text = string.format(gettext("\"%s\" has an update in BookOrbit.\n\nUpdate now and reload it?"), titleOf(item)),
@@ -87,10 +97,12 @@ local function askAboutOpenBook(plugin, item, temp, on_done)
             end
             local result
             ui:reloadDocument(function()
-                local store = Store.open(plugin:newClient())
+                local store = Store.open(client)
                 local installed, err = Updates.install(store.account, item, temp)
                 if installed then
                     store.save()
+                    -- Before the reader reopens, so its first progress check finds BookOrbit level.
+                    Updates.syncToServer(client, { installed })
                     result = installed
                 else
                     log("warn", "BookOrbit fork: could not update open book:", err)
@@ -109,9 +121,27 @@ function UI.run(plugin, opts)
     opts = opts or {}
     local client = plugin:newClient()
     local store = Store.open(client)
+    local reader = currentReader()
+    local open_path = reader and reader.document.file
+    local lines, changed_paths, failures = {}, {}, 0
+
+    -- Updates that arrived over USB during the sync, whatever libraries are chosen.
+    local device_changes = Updates.applyPendingDeviceChanges(store.account, open_path)
+    store.save()
+    if #device_changes > 0 then
+        Updates.syncToServer(client, device_changes)
+        for _, result in ipairs(device_changes) do
+            table.insert(changed_paths, result.path)
+            if result.reopened then table.insert(lines, line(result)) end
+        end
+    end
+
     local libraries = store.account.update_libraries
     if #libraries == 0 then
-        if opts.manual then
+        refreshLibraryViews(changed_paths)
+        if #lines > 0 then
+            show(require("ui/widget/infomessage"):new{ text = summary(lines, 0) })
+        elseif opts.manual then
             show(require("ui/widget/infomessage"):new{ text = gettext("Choose the libraries to keep updated first.") })
         end
         return
@@ -122,21 +152,16 @@ function UI.run(plugin, opts)
     store.save()
     if not pending then
         close(message)
+        refreshLibraryViews(changed_paths)
         log("warn", "BookOrbit fork: update check failed:", current_or_err)
+        if #lines > 0 then show(require("ui/widget/infomessage"):new{ text = summary(lines, 0) }) end
         if opts.manual then
             show(require("ui/widget/infomessage"):new{ text = gettext("Could not check for book updates.") })
         end
         return
     end
-    if #pending == 0 then
-        close(message)
-        if opts.manual then show(require("ui/widget/infomessage"):new{ text = gettext("All books are up to date."), timeout = 3 }) end
-        return
-    end
 
-    local reader = currentReader()
-    local open_path = reader and reader.document.file
-    local lines, installed, changed_paths, failures, open_item = {}, {}, {}, 0, nil
+    local installed, results, open_item = {}, {}, nil
     for index, item in ipairs(pending) do
         if item.path == open_path then
             open_item = item
@@ -147,8 +172,9 @@ function UI.run(plugin, opts)
             if temp then result, err = Updates.install(store.account, item, temp) end
             if result then
                 table.insert(installed, item)
+                table.insert(results, result)
                 table.insert(changed_paths, item.path)
-                table.insert(lines, (result.reopened and "↻ " or "• ") .. titleOf(item))
+                table.insert(lines, line(result, item))
             else
                 failures = failures + 1
                 log("warn", "BookOrbit fork: could not update", item.path, err)
@@ -157,19 +183,22 @@ function UI.run(plugin, opts)
     end
     store.save()
 
+    local reopened, uploaded = Updates.syncToServer(client, results)
     local released = Updates.releaseUnreadLinks(client, installed)
-    log("info", "BookOrbit fork: updated", #installed, "books, failed", failures, "released links", released)
+    log("info", "BookOrbit fork: updated", #installed, "books, failed", failures, "reopened", reopened,
+        "progress uploaded", uploaded, "released links", released)
     close(message)
     refreshLibraryViews(changed_paths)
 
     local function finish(open_result)
         if open_result then
-            table.insert(installed, open_item)
-            table.insert(lines, (open_result.reopened and "↻ " or "• ") .. titleOf(open_item))
+            table.insert(lines, line(open_result, open_item))
             Updates.releaseUnreadLinks(client, { open_item })
         end
         if #lines > 0 or failures > 0 then
             show(require("ui/widget/infomessage"):new{ text = summary(lines, failures) })
+        elseif opts.manual then
+            show(require("ui/widget/infomessage"):new{ text = gettext("All books are up to date."), timeout = 3 })
         end
     end
 
@@ -184,7 +213,7 @@ function UI.run(plugin, opts)
         finish(nil)
         return
     end
-    askAboutOpenBook(plugin, open_item, temp, finish)
+    askAboutOpenBook(plugin, client, open_item, temp, finish)
 end
 
 -- ---------------------------------------------------------------- menu

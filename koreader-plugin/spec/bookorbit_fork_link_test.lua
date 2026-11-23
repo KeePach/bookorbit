@@ -198,8 +198,8 @@ local failed_body, failed_err = Link.matchCheck(failing, server.client, { NEW_HA
 assert(failed_body == nil and failed_err == 500, "errors pass through")
 assert(#server.resolve_calls == 0, "no lookups after a failed check")
 
--- An update sent over USB: the same path gets a new file with more chapter text, so a finished book
--- goes back to reading at the next sync. A metadata-only resend keeps the same text and stays finished.
+-- An update sent over USB: the same path gets a new file with more chapter text, so it is recorded
+-- as pending, to be applied once the sync is over. A metadata-only resend keeps the same text.
 local function zipOf(entries)
     local parts, directory, offset = {}, {}, 0
     local function u16(n) return string.char(n % 256, math.floor(n / 256) % 256) end
@@ -246,24 +246,29 @@ assert(account.paths[USB_BOOK].textSize == 900, "the chapter text of a matched b
 writeFile(USB_BOOK, zipOf({ { "OEBPS/file0001.xhtml", string.rep("a", 900) }, { "OEBPS/file0002.xhtml", string.rep("b", 100) } }))
 sidecars[USB_BOOK] = { summary = { status = "complete", modified = os.date("%Y-%m-%d") }, percent_finished = 1.0 }
 check(server, { NEW_HASH }, { [NEW_HASH] = { file = USB_BOOK, source = "file" } })
-assert(sidecars[USB_BOOK].summary.status == "reading", "new chapters over USB reopen a book finished the same day")
-assert(math.abs(sidecars[USB_BOOK].percent_finished - 0.9) < 1e-9, "its percentage follows the chapter text")
-assert(sidecars[USB_BOOK].partial_md5_checksum == NEW_HASH, "the sidecar's cached hash is the new one")
+account = settings_store[SETTINGS_DIR .. "/" .. Link.STATE_FILE].accounts["http://server|reader"]
+assert(sidecars[USB_BOOK].summary.status == "complete", "the sidecar is not touched during the sync")
+local pending = account.pending_reopen[USB_BOOK]
+assert(pending and pending.oldText == 900 and pending.newText == 1000 and pending.hash == NEW_HASH and pending.bookId == 120,
+    "new chapters over USB are recorded as pending, with the book id to reopen on BookOrbit")
 assert(account.paths[USB_BOOK].textSize == 1000 and account.paths[USB_BOOK].hash == NEW_HASH, "the new text and hash are recorded")
+account.pending_reopen = {}
 
 local RESEND_HASH = string.rep("d", 32)
 writeFile(USB_BOOK, zipOf({ { "OEBPS/file0001.xhtml", string.rep("a", 900) }, { "OEBPS/file0002.xhtml", string.rep("b", 100) },
     { "content.opf", "<package resent='yes'/>" } }))
 sidecars[USB_BOOK] = { summary = { status = "complete", modified = os.date("%Y-%m-%d") }, percent_finished = 1.0 }
 check(server, { RESEND_HASH }, { [RESEND_HASH] = { file = USB_BOOK, source = "file" } })
-assert(sidecars[USB_BOOK].summary.status == "complete" and sidecars[USB_BOOK].percent_finished == 1.0,
-    "a metadata-only resend keeps the book finished")
+account = settings_store[SETTINGS_DIR .. "/" .. Link.STATE_FILE].accounts["http://server|reader"]
+assert(next(account.pending_reopen or {}) == nil, "a metadata-only resend is not an update")
 
 local OPEN_HASH = string.rep("e", 32)
 writeFile(USB_BOOK, zipOf({ { "OEBPS/file0001.xhtml", string.rep("a", 2000) } }))
 reader_ui.instance = { document = { file = USB_BOOK, getProps = function() return {} end } }
 check(server, { OPEN_HASH }, { [OPEN_HASH] = { file = USB_BOOK, source = "file" } })
+account = settings_store[SETTINGS_DIR .. "/" .. Link.STATE_FILE].accounts["http://server|reader"]
 assert(sidecars[USB_BOOK].summary.status == "complete", "the open book's sidecar is left to KOReader")
+assert(account.pending_reopen[USB_BOOK].hash == OPEN_HASH, "the open book's update waits as pending until it closes")
 reader_ui.instance = nil
 os.remove(USB_BOOK)
 

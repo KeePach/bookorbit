@@ -110,28 +110,16 @@ function Link.enrich(client, hashes, candidates)
 end
 
 -- A new file at a path the fork knows, with more chapter text than the one recorded there, is an
--- update that arrived outside the fork (Calibre over USB). A finished book goes back to reading, as
--- the fanficupdate plugin did on a size change; a metadata-only resend keeps the same text and is
--- left alone. The open book is skipped: its sidecar is rewritten when it closes.
-local function reopenIfUpdatedOnDevice(path, known, new_text, new_hash, open_path)
-    if path == open_path or type(known) ~= "table" or known.hash == new_hash then return false end
+-- update that arrived outside the fork (Calibre over USB). It is recorded as pending and applied
+-- once the sync is over (bookorbit_fork_updates_ui): applied now, the sync's own status step would
+-- put BookOrbit's "finished" back. A metadata-only resend keeps the same text and is left alone.
+local function noteDeviceChange(account, path, known, new_text, new_hash, book_id)
+    if type(known) ~= "table" or known.hash == new_hash then return end
     local old_text = tonumber(known.textSize)
-    if not old_text or old_text <= 0 or not new_text or new_text <= old_text then return false end
-    local Updates = require("bookorbit_fork_updates")
-    local ok, reopened = pcall(Updates.applyToSidecar, path, {
-        measure = { oldText = old_text, newText = new_text, ratio = old_text / new_text },
-        newHash = new_hash,
-        scaleInProgress = false,
-    })
-    if not ok then
-        log("warn", "BookOrbit fork: could not update the status of", path, reopened)
-        return false
-    end
-    if reopened then
-        Updates.moveFanficBaseline(path)
-        log("info", "BookOrbit fork: new chapters arrived on the device, back to reading:", path)
-    end
-    return reopened
+    if not old_text or old_text <= 0 or not new_text or new_text <= old_text then return end
+    account.pending_reopen = account.pending_reopen or {}
+    account.pending_reopen[path] = { oldText = old_text, newText = new_text, hash = new_hash, bookId = book_id }
+    log("info", "BookOrbit fork: new chapters arrived on the device:", path)
 end
 
 --- Remembers the path of every matched book, so the next version of its file links by path, and
@@ -141,7 +129,6 @@ function Link.learn(client, hashes, candidates, body)
     local Epub = require("bookorbit_fork_epub")
     local store = Store.open(client)
     local account = store.account
-    local open_path = currentDocument()
     local changed = false
     for _, match in ipairs(body.matches) do
         local candidate = type(match) == "table" and candidates[match.hash]
@@ -152,7 +139,7 @@ function Link.learn(client, hashes, candidates, body)
             if moved or known.textSize == nil then
                 local text_ok, new_text = pcall(Epub.textSize, path)
                 new_text = text_ok and new_text or nil
-                if moved then reopenIfUpdatedOnDevice(path, known, new_text, match.hash, open_path) end
+                if moved then noteDeviceChange(account, path, known, new_text, match.hash, match.bookId) end
                 account.paths[path] = { bookFileId = match.bookFileId, bookId = match.bookId, hash = match.hash, textSize = new_text or 0 }
                 changed = true
             end

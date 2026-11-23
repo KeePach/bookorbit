@@ -15,6 +15,7 @@ local Updates = {}
 Updates.CHECK_PATH = "/koreader/plugin/fork/file-updates"
 Updates.LIBRARIES_PATH = "/koreader/plugin/fork/libraries"
 Updates.RELEASE_PATH = "/koreader/plugin/fork/release-links"
+Updates.REOPEN_PATH = "/koreader/plugin/fork/reopen"
 local CHECK_BATCH = 500
 
 function Updates.downloadPath(book_file_id)
@@ -175,32 +176,42 @@ function Updates.measure(old_path, new_path, old_size, new_size)
 end
 
 --- Brings KOReader's sidecar for the book at `path` in line with a new copy of its file.
---- A finished book with new chapters goes back to reading below 100%. With `scale_in_progress`, a
---- book in progress keeps its status and has its percentage scaled. Returns true when a finished
---- book was reopened.
+--- A finished book with new chapters goes back to reading below 100%. With `scaleInProgress`, a
+--- book in progress keeps its status and has its percentage scaled. Returns what changed:
+--- { reopened, percent (when it changed), position (KOReader's xpointer), title }.
 function Updates.applyToSidecar(path, change)
+    local result = { reopened = false }
     local DocSettings = dep("DocSettings")
-    if not DocSettings:hasSidecarFile(path) then return false end
+    if not DocSettings:hasSidecarFile(path) then return result end
     local settings = DocSettings:open(path)
-    local reopened = false
     local summary = settings:readSetting("summary") or {}
     local percent = tonumber(settings:readSetting("percent_finished"))
     local ratio = change.measure and change.measure.ratio
+    local new_percent
     if summary.status == "complete" then
         local measure = change.measure or {}
         if Updates.hasNewContent(measure.oldText, measure.newText, summary, change.contentMtimeMs) then
             summary.status = "reading"
             summary.modified = os.date("%Y-%m-%d")
             settings:saveSetting("summary", summary)
-            if percent and ratio then settings:saveSetting("percent_finished", math.min(percent * ratio, 0.99)) end
-            reopened = true
+            if percent and ratio then new_percent = math.min(percent * ratio, 0.99) end
+            result.reopened = true
         end
     elseif change.scaleInProgress and percent and ratio and ratio ~= 1 then
-        settings:saveSetting("percent_finished", math.min(percent * ratio, 1))
+        new_percent = math.min(percent * ratio, 1)
+    end
+    if new_percent then
+        new_percent = math.floor(new_percent * 10000 + 0.5) / 10000
+        settings:saveSetting("percent_finished", new_percent)
+        result.percent = new_percent
     end
     if change.newHash then settings:saveSetting("partial_md5_checksum", change.newHash) end
     settings:flush()
-    return reopened
+    local position = settings:readSetting("last_xpointer")
+    result.position = type(position) == "string" and position or nil
+    local props = settings:readSetting("doc_props")
+    result.title = type(props) == "table" and type(props.title) == "string" and props.title ~= "" and props.title or nil
+    return result
 end
 
 --- The fanficupdate plugin compares sizes against its own baseline; moving the baseline keeps it from
@@ -246,19 +257,78 @@ function Updates.install(account, item, temp)
         return nil, err
     end
 
-    local reopened = false
-    local sidecar_ok, sidecar_result = pcall(Updates.applyToSidecar, item.path, {
+    local sidecar_ok, result = pcall(Updates.applyToSidecar, item.path, {
         measure = measure,
         contentMtimeMs = item.contentMtimeMs,
         newHash = item.newHash,
         scaleInProgress = true,
     })
-    if sidecar_ok then reopened = sidecar_result else log("warn", "BookOrbit fork: sidecar not updated:", sidecar_result) end
+    if not sidecar_ok then
+        log("warn", "BookOrbit fork: sidecar not updated:", result)
+        result = { reopened = false }
+    end
     Updates.moveFanficBaseline(item.path)
     tellUpstreamState(item)
 
     account.paths[item.path] = { bookFileId = item.bookFileId, bookId = item.bookId, hash = item.newHash, textSize = measure.newText or 0 }
-    return { reopened = reopened }
+    result.bookId = item.bookId
+    result.hash = item.newHash
+    return result
+end
+
+--- Applies the updates that arrived over USB, which the sync recorded as pending: they wait until
+--- the sync is over, as its own status step would otherwise put BookOrbit's "finished" back. The
+--- open book stays pending. Returns the sidecar results, each with bookId and hash.
+function Updates.applyPendingDeviceChanges(account, open_path)
+    local results = {}
+    for path, pending in pairs(account.pending_reopen or {}) do
+        if path ~= open_path then
+            account.pending_reopen[path] = nil
+            if exists(path) and type(pending) == "table" then
+                local ok, result = pcall(Updates.applyToSidecar, path, {
+                    measure = { oldText = pending.oldText, newText = pending.newText, ratio = pending.oldText / pending.newText },
+                    newHash = pending.hash,
+                    scaleInProgress = false,
+                })
+                if ok then
+                    if result.reopened then Updates.moveFanficBaseline(path) end
+                    result.bookId = pending.bookId
+                    result.hash = pending.hash
+                    result.path = path
+                    table.insert(results, result)
+                else
+                    log("warn", "BookOrbit fork: could not apply the update of", path, result)
+                end
+            end
+        end
+    end
+    return results
+end
+
+--- Tells BookOrbit what the device changed, so the next sync does not undo it: reopened books get
+--- their finished read reopened, and every changed percentage is uploaded with KOReader's position,
+--- so BookOrbit is never "ahead" of the book. The status goes first, so the progress continues
+--- that read instead of starting a reread.
+function Updates.syncToServer(client, results)
+    local book_ids, seen = {}, {}
+    for _, result in ipairs(results) do
+        if result.reopened and result.bookId and not seen[result.bookId] then
+            seen[result.bookId] = true
+            table.insert(book_ids, result.bookId)
+        end
+    end
+    if #book_ids > 0 then
+        local body, err = client:request("POST", Updates.REOPEN_PATH, { bookIds = book_ids })
+        if type(body) ~= "table" then log("warn", "BookOrbit fork: could not reopen books on the server:", err) end
+    end
+    local uploaded = 0
+    for _, result in ipairs(results) do
+        if result.percent and result.hash and type(client.updateProgress) == "function" then
+            local ok, body = pcall(client.updateProgress, client, result.hash, result.percent, result.position, os.time())
+            if ok and body then uploaded = uploaded + 1 end
+        end
+    end
+    return #book_ids, uploaded
 end
 
 local function wasRead(session, hash)
