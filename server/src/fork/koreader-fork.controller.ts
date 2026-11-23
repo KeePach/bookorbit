@@ -8,7 +8,7 @@ import { KoreaderAuthGuard } from '../modules/koreader/koreader-auth.guard';
 import { CalibreRefsService } from './calibre-refs/calibre-refs.service';
 import { FileUpdatesService } from './file-updates/file-updates.service';
 import { FORK_CAPABILITIES } from './fork.constants';
-import { CalibreResolveDto, FileUpdatesDto, ReleaseLinksDto } from './koreader-fork.dto';
+import { CalibreResolveDto, FileUpdatesDto, ReleaseLinksDto, ReopenBooksDto } from './koreader-fork.dto';
 
 @Public()
 @UseGuards(KoreaderAuthGuard)
@@ -44,6 +44,12 @@ export class KoreaderForkController {
   @Get('files/:bookFileId/original')
   downloadOriginal(@CurrentUser() user: RequestUser, @Param('bookFileId', ParseIntPipe) bookFileId: number, @Res() reply: FastifyReply) {
     return this.fileUpdates.streamOriginal(user, bookFileId, reply);
+  }
+
+  @Post('reopen')
+  @HttpCode(200)
+  reopen(@CurrentUser() user: RequestUser, @Body() dto: ReopenBooksDto) {
+    return this.fileUpdates.reopen(user, dto.bookIds);
   }
 
   @Post('release-links')

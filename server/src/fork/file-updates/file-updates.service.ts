@@ -6,12 +6,16 @@ import { stat } from 'fs/promises';
 import { LibraryScopeService } from '../../common/library-scope/library-scope.service';
 import type { RequestUser } from '../../common/types/request-user';
 import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
+import { resolveTimeZone } from '../../common/utils/timezone.utils';
 import { BookService } from '../../modules/book/book.service';
+import { ReadingAttemptService } from '../../modules/user-book-status/reading-attempt.service';
+import { UserBookStatusService } from '../../modules/user-book-status/user-book-status.service';
 import { FileUpdatesRepository, type LibrarySummary, type TrackedFile } from './file-updates.repository';
 
 const CHECK_EVENT = 'fork.file_updates_check';
 const RELEASE_EVENT = 'fork.release_links';
 const DOWNLOAD_EVENT = 'fork.file_download';
+const REOPEN_EVENT = 'fork.reopen_books';
 
 export type FileUpdateStatus = 'current' | 'updated' | 'missing' | 'out_of_scope' | 'skipped';
 
@@ -36,6 +40,8 @@ export class FileUpdatesService {
     private readonly repository: FileUpdatesRepository,
     private readonly libraryScope: LibraryScopeService,
     private readonly bookService: BookService,
+    private readonly userBookStatus: UserBookStatusService,
+    private readonly readingAttempts: ReadingAttemptService,
   ) {}
 
   async libraries(user: RequestUser): Promise<{ libraries: LibrarySummary[] }> {
@@ -90,6 +96,37 @@ export class FileUpdatesService {
       `[${RELEASE_EVENT}] [end] userId=${user.id} durationMs=${Date.now() - startedAt} requested=${links.length} released=${released} - superseded hash links released`,
     );
     return { released };
+  }
+
+  /**
+   * Moves books the device reopened after new chapters from read back to reading. The device's own
+   * status upload can't do it on the day the book was finished: a same-day tie keeps the server
+   * value, which would turn the book back to finished at the next sync. New chapters continue the
+   * read that just finished, so that read is reopened instead of starting a reread, and the fic is
+   * not counted as read twice. Only books that are read change.
+   */
+  async reopen(user: RequestUser, bookIds: number[]): Promise<{ reopened: number[] }> {
+    const startedAt = Date.now();
+    const visible = await this.repository.findVisibleBookIds([...new Set(bookIds)], await this.libraryScope.visibleIdsOrAll(user));
+    const statuses = await this.userBookStatus.findByBookIds(user.id, visible);
+    const timeZone = resolveTimeZone((user.settings as { timezone?: unknown } | undefined)?.timezone, 'UTC');
+    const reopened: number[] = [];
+    let continued = 0;
+    for (const bookId of visible) {
+      if (statuses.get(bookId)?.status !== 'read') continue;
+      const latest = (await this.readingAttempts.list(user.id, bookId, 1, 1)).items[0];
+      if (latest?.outcome === 'completed' && latest.endedOn) {
+        await this.readingAttempts.update(user.id, bookId, latest.id, { endedOn: null, outcome: null });
+        continued += 1;
+      } else {
+        await this.userBookStatus.updateManual(user.id, bookId, { status: 'reading' }, undefined, timeZone);
+      }
+      reopened.push(bookId);
+    }
+    this.logger.log(
+      `[${REOPEN_EVENT}] [end] userId=${user.id} durationMs=${Date.now() - startedAt} requested=${bookIds.length} reopened=${reopened.length} continuedReads=${continued} - finished books reopened`,
+    );
+    return { reopened };
   }
 
   /** Streams the stored file byte for byte, so the device copy hashes the same as BookOrbit's. */

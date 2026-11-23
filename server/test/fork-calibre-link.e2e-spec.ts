@@ -74,7 +74,7 @@ describe('Fork: Calibre uuid linking for KOReader (e2e)', { timeout: 180_000 }, 
   it('advertises its capabilities to the plugin', async () => {
     const response = await ctx.app.inject({ method: 'GET', url: '/api/v1/koreader/plugin/fork/capabilities', headers: deviceHeaders() });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ capabilities: ['calibreResolve', 'fileUpdates', 'releaseLinks'] });
+    expect(response.json()).toEqual({ capabilities: ['calibreResolve', 'fileUpdates', 'releaseLinks', 'reopenBooks'] });
   });
 
   it('requires KOReader credentials', async () => {

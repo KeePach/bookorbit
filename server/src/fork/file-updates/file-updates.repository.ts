@@ -51,6 +51,16 @@ export class FileUpdatesRepository {
       .where(and(inArray(bookFiles.id, bookFileIds), eq(books.status, 'present'), libraryIds ? inArray(books.libraryId, libraryIds) : undefined));
   }
 
+  /** The ids among `bookIds` of present books, limited to `libraryIds` unless null. */
+  async findVisibleBookIds(bookIds: number[], libraryIds: number[] | null): Promise<number[]> {
+    if (bookIds.length === 0 || (libraryIds !== null && libraryIds.length === 0)) return [];
+    const rows = await this.db
+      .select({ id: books.id })
+      .from(books)
+      .where(and(inArray(books.id, bookIds), eq(books.status, 'present'), libraryIds ? inArray(books.libraryId, libraryIds) : undefined));
+    return rows.map((row) => row.id);
+  }
+
   async listLibraries(libraryIds: number[] | null): Promise<LibrarySummary[]> {
     if (libraryIds !== null && libraryIds.length === 0) return [];
     return this.db

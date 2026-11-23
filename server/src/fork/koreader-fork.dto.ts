@@ -47,3 +47,12 @@ export class ReleaseLinksDto {
   @Type(() => FileHashItemDto)
   items!: FileHashItemDto[];
 }
+
+export class ReopenBooksDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(500)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  bookIds!: number[];
+}

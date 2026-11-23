@@ -1,6 +1,8 @@
 import type { LibraryScopeService } from '../../common/library-scope/library-scope.service';
 import type { RequestUser } from '../../common/types/request-user';
 import type { BookService } from '../../modules/book/book.service';
+import type { ReadingAttemptService } from '../../modules/user-book-status/reading-attempt.service';
+import type { UserBookStatusService } from '../../modules/user-book-status/user-book-status.service';
 import type { FileUpdatesRepository, TrackedFile } from './file-updates.repository';
 import { FileUpdatesService } from './file-updates.service';
 
@@ -30,6 +32,8 @@ describe('FileUpdatesService.check', () => {
       repository as unknown as FileUpdatesRepository,
       libraryScope as unknown as LibraryScopeService,
       {} as BookService,
+      {} as UserBookStatusService,
+      {} as ReadingAttemptService,
     );
     return { service, repository };
   };
@@ -87,5 +91,63 @@ describe('FileUpdatesService.check', () => {
     const { items } = await service.check(user, [{ bookFileId: 1, hash: OTHER }]);
 
     expect(items[0]).toMatchObject({ status: 'updated', mtimeMs: null });
+  });
+});
+
+describe('FileUpdatesService.reopen', () => {
+  const build = (attempts: Record<number, { id: number; outcome: string | null; endedOn: string | null }[]>) => {
+    const repository = { findVisibleBookIds: vi.fn(() => Promise.resolve([1, 2, 3])) };
+    const libraryScope = { visibleIdsOrAll: vi.fn(() => Promise.resolve([100])) };
+    const userBookStatus = {
+      findByBookIds: vi.fn(() =>
+        Promise.resolve(
+          new Map([
+            [1, { status: 'read' }],
+            [2, { status: 'reading' }],
+            [3, { status: 'read' }],
+          ]),
+        ),
+      ),
+      updateManual: vi.fn(() => Promise.resolve({})),
+    };
+    const readingAttempts = {
+      list: vi.fn((_userId: number, bookId: number) => Promise.resolve({ items: attempts[bookId] ?? [] })),
+      update: vi.fn(() => Promise.resolve({})),
+    };
+    const service = new FileUpdatesService(
+      repository as unknown as FileUpdatesRepository,
+      libraryScope as unknown as LibraryScopeService,
+      {} as BookService,
+      userBookStatus as unknown as UserBookStatusService,
+      readingAttempts as unknown as ReadingAttemptService,
+    );
+    return { service, repository, userBookStatus, readingAttempts };
+  };
+  const reader = { id: 3, settings: { timezone: 'America/Mexico_City' } } as unknown as RequestUser;
+
+  it('reopens the latest finished read of each visible read book, so it is not counted twice', async () => {
+    const { service, repository, userBookStatus, readingAttempts } = build({
+      1: [{ id: 11, outcome: 'completed', endedOn: '2026-11-23' }],
+      3: [{ id: 31, outcome: 'completed', endedOn: '2026-11-20' }],
+    });
+
+    const result = await service.reopen(reader, [1, 2, 3, 3, 9]);
+
+    expect(repository.findVisibleBookIds).toHaveBeenCalledWith([1, 2, 3, 9], [100]);
+    expect(readingAttempts.update).toHaveBeenCalledWith(3, 1, 11, { endedOn: null, outcome: null });
+    expect(readingAttempts.update).toHaveBeenCalledWith(3, 3, 31, { endedOn: null, outcome: null });
+    expect(readingAttempts.update).toHaveBeenCalledTimes(2);
+    expect(userBookStatus.updateManual).not.toHaveBeenCalled();
+    expect(result).toEqual({ reopened: [1, 3] });
+  });
+
+  it('falls back to a plain status change when there is no finished read to reopen', async () => {
+    const { service, userBookStatus, readingAttempts } = build({ 1: [], 3: [{ id: 32, outcome: 'abandoned', endedOn: '2026-11-01' }] });
+
+    await service.reopen(reader, [1, 3]);
+
+    expect(readingAttempts.update).not.toHaveBeenCalled();
+    expect(userBookStatus.updateManual).toHaveBeenCalledWith(3, 1, { status: 'reading' }, undefined, 'America/Mexico_City');
+    expect(userBookStatus.updateManual).toHaveBeenCalledWith(3, 3, { status: 'reading' }, undefined, 'America/Mexico_City');
   });
 });

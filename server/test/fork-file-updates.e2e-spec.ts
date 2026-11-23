@@ -8,6 +8,8 @@ import { Permission } from '@bookorbit/types';
 
 import { computeFileHash } from '../src/common/utils/file-hash.utils';
 import * as schema from '../src/db/schema';
+import { ReadingAttemptService } from '../src/modules/user-book-status/reading-attempt.service';
+import { UserBookStatusService } from '../src/modules/user-book-status/user-book-status.service';
 import { createEpubFixture } from './e2e/metadata-write/metadata-write-fixture-builder';
 import {
   authHeader,
@@ -36,6 +38,7 @@ describe('Fork: KOReader file updates (e2e)', { timeout: 180_000 }, () => {
   let novel!: LocatedBookFile;
   let hiddenBook!: LocatedBookFile;
   let ficHash!: string;
+  let readerId!: number;
 
   const deviceHeaders = () => ({ 'x-auth-user': KOREADER_USERNAME, 'x-auth-key': KOREADER_PASSWORD });
 
@@ -67,6 +70,7 @@ describe('Fork: KOReader file updates (e2e)', { timeout: 180_000 }, () => {
       .hash!;
 
     const reader = await createUserAndLogin(ctx, { permissions: [Permission.KoreaderSync] });
+    readerId = reader.userId;
     await grantLibraryAccess(ctx, reader.userId, fanfics.libraryId);
     await grantLibraryAccess(ctx, reader.userId, novels.libraryId);
     const credentials = await ctx.app.inject({
@@ -192,5 +196,27 @@ describe('Fork: KOReader file updates (e2e)', { timeout: 180_000 }, () => {
 
     const unmatched = await ctx.db.select().from(schema.koreaderUnmatchedBooks).where(eq(schema.koreaderUnmatchedBooks.hash, deviceHash));
     expect(unmatched).toHaveLength(0);
+  });
+
+  it('reopens the finished read on the server, without counting the book twice', async () => {
+    const statuses = ctx.app.get(UserBookStatusService);
+    await statuses.setManual(readerId, fic.bookId, 'read');
+    await statuses.setManual(readerId, novel.bookId, 'reading');
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/v1/koreader/plugin/fork/reopen',
+      headers: deviceHeaders(),
+      payload: { bookIds: [fic.bookId, novel.bookId, hiddenBook.bookId] },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ reopened: [fic.bookId] });
+    expect((await statuses.findOne(readerId, fic.bookId))?.status).toBe('reading');
+    const attempts = await ctx.app.get(ReadingAttemptService).list(readerId, fic.bookId, 1, 20);
+    expect(attempts.items).toHaveLength(1);
+    expect(attempts.items[0]).toMatchObject({ endedOn: null, outcome: null });
+    expect((await statuses.findOne(readerId, novel.bookId))?.status).toBe('reading');
+    expect(await statuses.findOne(readerId, hiddenBook.bookId)).toBeNull();
   });
 });
