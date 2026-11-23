@@ -191,11 +191,16 @@ assert(state_calls[2][1] == "link" and state_calls[2][2] == "bookorbit-copy-v2" 
 assert(account.paths[FIC].hash == "bookorbit-copy-v2", "the fork index has the new hash")
 
 -- A finished book only goes back to reading when BookOrbit's file changed after the day it was finished.
-assert(Updates.hasNewContent({ modified = "2026-11-19" }, { contentMtimeMs = NOV_20 }) == true, "changed the day after it was finished")
-assert(Updates.hasNewContent({ modified = "2026-11-20" }, { contentMtimeMs = NOV_20 }) == false, "changed the day it was finished counts as already read")
-assert(Updates.hasNewContent({ modified = "2026-11-21" }, { contentMtimeMs = NOV_20 }) == false, "finished after the change, as with a copy read over USB")
-assert(Updates.hasNewContent({}, { contentMtimeMs = NOV_20 }) == false, "no finish date leaves the book alone")
-assert(Updates.hasNewContent({ modified = "2026-11-19" }, {}) == false, "no change time leaves the book alone")
+-- With both copies measured, only more chapter text counts, whatever the dates say.
+assert(Updates.hasNewContent(900, 1000, { modified = "2026-11-25" }, NOV_20) == true, "more chapter text is new content, even if finished later")
+assert(Updates.hasNewContent(1000, 1000, { modified = "2026-11-01" }, NOV_20) == false, "the same chapter text is not, even if finished earlier")
+assert(Updates.hasNewContent(1000, 950, { modified = "2026-11-01" }, NOV_20) == false, "less text is not new content")
+-- Without measurements (not zips), the change date is compared with the day the status was set.
+assert(Updates.hasNewContent(nil, nil, { modified = "2026-11-19" }, NOV_20) == true, "changed the day after it was finished")
+assert(Updates.hasNewContent(nil, nil, { modified = "2026-11-20" }, NOV_20) == false, "changed the day it was finished counts as already read")
+assert(Updates.hasNewContent(nil, nil, { modified = "2026-11-21" }, NOV_20) == false, "finished after the change, as with a copy read over USB")
+assert(Updates.hasNewContent(nil, nil, {}, NOV_20) == false, "no finish date leaves the book alone")
+assert(Updates.hasNewContent(nil, nil, { modified = "2026-11-19" }, nil) == false, "no change time leaves the book alone")
 
 -- The first swap of a Calibre copy the reader finished after its last update keeps it finished.
 writeAll(FIC, "calibre-copy-v2b")
@@ -290,22 +295,41 @@ writeAll(NEW_EPUB, zipOf({ { "mimetype", "application/epub+zip" }, { "OEBPS/cove
     { "content.opf", "<package version='longer'/>" } }))
 assert(Epub.textSize(OLD_EPUB) == 900 and Epub.textSize(NEW_EPUB) == 1000, "only (X)HTML entries are counted")
 assert(Epub.textSize(FIC) == nil and Epub.textSize(ROOT .. "/missing.epub") == nil, "a file that is not a zip has no text size")
-local ratio = Updates.progressRatio(OLD_EPUB, NEW_EPUB, 1, 1)
-assert(math.abs(ratio - 0.9) < 1e-9, "a finished book with one new chapter of ten lands at 90%")
-assert(Updates.progressRatio(FIC, ROOT .. "/missing.epub", 10, 20) == 0.5, "without zips the file sizes are used")
-assert(Updates.progressRatio(FIC, ROOT .. "/missing.epub", nil, 20) == nil, "without either nothing is estimated")
+local measured = Updates.measure(OLD_EPUB, NEW_EPUB, 1, 1)
+assert(measured.oldText == 900 and measured.newText == 1000, "both copies are measured")
+assert(math.abs(measured.ratio - 0.9) < 1e-9, "a finished book with one new chapter of ten lands at 90%")
+assert(Updates.measure(FIC, ROOT .. "/missing.epub", 10, 20).ratio == 0.5, "without zips the file sizes are used")
+assert(Updates.measure(FIC, ROOT .. "/missing.epub", nil, 20).ratio == nil, "without either nothing is estimated")
 
 local ZIPPED = ROOT .. "/Fanfic/Zipped - Author.epub"
 writeAll(ZIPPED, readAll(OLD_EPUB))
 account.paths[ZIPPED] = { bookFileId = 5, bookId = 50, hash = readAll(OLD_EPUB) }
 server.files[5] = { bookId = 50, title = "Zipped", content = readAll(NEW_EPUB), mtimeMs = NOV_20 }
-sidecars[ZIPPED] = { summary = { status = "complete", modified = "2026-11-01" }, percent_finished = 1.0 }
+-- Finished on the day of the update, which the old date rule could not tell apart.
+sidecars[ZIPPED] = { summary = { status = "complete", modified = os.date("%Y-%m-%d", NOV_20 / 1000) }, percent_finished = 1.0 }
 pending = Updates.find(server.client, account, { 7 })
 local zipped_item
 for _, candidate in ipairs(pending) do if candidate.path == ZIPPED then zipped_item = candidate end end
 result = assert(Updates.install(account, zipped_item, assert(Updates.download(server.client, zipped_item))))
 assert(result.reopened == true and sidecars[ZIPPED].summary.status == "reading", "the finished book with a new chapter is reopened")
 assert(math.abs(sidecars[ZIPPED].percent_finished - 0.9) < 1e-9, "100% of the old text is 90% of the new one")
+assert(account.paths[ZIPPED].textSize == 1000, "the index records the chapter text of the new copy")
+
+-- A swap that brings the same chapter text keeps a finished book finished, even on a later day.
+local SAME = ROOT .. "/Fanfic/Same - Author.epub"
+local repackaged = zipOf({ { "mimetype", "application/epub+zip" }, { "OEBPS/cover.jpg", IMAGE },
+    { "OEBPS/file0001.xhtml", string.rep("a", 900) }, { "OEBPS/File0002.XHTML", string.rep("b", 100) },
+    { "content.opf", "<package version='calibre-sent'/>" } })
+writeAll(SAME, repackaged)
+account.paths[SAME] = { bookFileId = 6, bookId = 60, hash = repackaged }
+server.files[6] = { bookId = 60, title = "Same", content = readAll(NEW_EPUB), mtimeMs = NOV_20 + 5 * 86400000 }
+sidecars[SAME] = { summary = { status = "complete", modified = "2026-11-01" }, percent_finished = 1.0 }
+pending = Updates.find(server.client, account, { 7 })
+local same_item
+for _, candidate in ipairs(pending) do if candidate.path == SAME then same_item = candidate end end
+result = assert(Updates.install(account, same_item, assert(Updates.download(server.client, same_item))))
+assert(result.reopened == false and sidecars[SAME].summary.status == "complete" and sidecars[SAME].percent_finished == 1.0,
+    "a repackaged copy with the same chapters stays finished at 100%")
 
 os.execute("rm -rf '" .. ROOT .. "'")
 print("bookorbit_fork_updates_test: ok")
