@@ -1,12 +1,15 @@
 import { Module } from '@nestjs/common';
 
 import { CommonModule } from '../common/common.module';
+import { BookModule } from '../modules/book/book.module';
 import { KoreaderAuthGuard } from '../modules/koreader/koreader-auth.guard';
 import { KoreaderModule } from '../modules/koreader/koreader.module';
 import { UserModule } from '../modules/user/user.module';
 import { CalibreRefsIndexerService } from './calibre-refs/calibre-refs-indexer.service';
 import { CalibreRefsRepository } from './calibre-refs/calibre-refs.repository';
 import { CalibreRefsService } from './calibre-refs/calibre-refs.service';
+import { FileUpdatesRepository } from './file-updates/file-updates.repository';
+import { FileUpdatesService } from './file-updates/file-updates.service';
 import { KoreaderForkController } from './koreader-fork.controller';
 
 /**
@@ -14,8 +17,8 @@ import { KoreaderForkController } from './koreader-fork.controller';
  * touch it; app.module.ts only registers it.
  */
 @Module({
-  imports: [CommonModule, UserModule, KoreaderModule],
+  imports: [CommonModule, UserModule, KoreaderModule, BookModule],
   controllers: [KoreaderForkController],
-  providers: [KoreaderAuthGuard, CalibreRefsRepository, CalibreRefsIndexerService, CalibreRefsService],
+  providers: [KoreaderAuthGuard, CalibreRefsRepository, CalibreRefsIndexerService, CalibreRefsService, FileUpdatesRepository, FileUpdatesService],
 })
 export class ForkModule {}

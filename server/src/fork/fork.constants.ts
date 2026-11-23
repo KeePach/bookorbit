@@ -1,1 +1,1 @@
-export const FORK_CAPABILITIES = ['calibreResolve'] as const;
+export const FORK_CAPABILITIES = ['calibreResolve', 'fileUpdates', 'releaseLinks'] as const;

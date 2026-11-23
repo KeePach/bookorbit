@@ -3,6 +3,8 @@ import { writeFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import { eq, sql } from 'drizzle-orm';
 
+import { Permission } from '@bookorbit/types';
+
 import * as schema from '../src/db/schema';
 import { createEpubFixture } from './e2e/metadata-write/metadata-write-fixture-builder';
 import {
@@ -10,6 +12,8 @@ import {
   closeReaderStateIsolationE2EContext,
   createLibraryWithFolder,
   createReaderStateIsolationE2EContext,
+  createUserAndLogin,
+  grantLibraryAccess,
   locateBookByAbsolutePath,
   triggerAndWaitForLibraryScan,
   type LocatedBookFile,
@@ -47,10 +51,12 @@ describe('Fork: Calibre uuid linking for KOReader (e2e)', { timeout: 180_000 }, 
     await triggerAndWaitForLibraryScan(ctx, library.libraryId);
     book = await locateBookByAbsolutePath(ctx, epubPath);
 
+    const reader = await createUserAndLogin(ctx, { permissions: [Permission.KoreaderSync] });
+    await grantLibraryAccess(ctx, reader.userId, library.libraryId);
     const credentials = await ctx.app.inject({
       method: 'POST',
       url: '/api/v1/koreader/credentials',
-      headers: authHeader(ctx.adminToken),
+      headers: authHeader(reader.accessToken),
       payload: { username: KOREADER_USERNAME, password: KOREADER_PASSWORD },
     });
     expect([200, 201]).toContain(credentials.statusCode);
@@ -68,7 +74,7 @@ describe('Fork: Calibre uuid linking for KOReader (e2e)', { timeout: 180_000 }, 
   it('advertises its capabilities to the plugin', async () => {
     const response = await ctx.app.inject({ method: 'GET', url: '/api/v1/koreader/plugin/fork/capabilities', headers: deviceHeaders() });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ capabilities: ['calibreResolve'] });
+    expect(response.json()).toEqual({ capabilities: ['calibreResolve', 'fileUpdates', 'releaseLinks'] });
   });
 
   it('requires KOReader credentials', async () => {
