@@ -1,9 +1,10 @@
 --[[--
 Fork: the Wi-Fi update flow around bookorbit_fork_updates, and its menu.
 
-Runs after a manual Sync now finishes. Closed books are replaced right away; for the book that is
-open the user is asked first, and the reader reloads it after the swap. Nothing runs until at least
-one library is chosen under BookOrbit > Fanfic updates.
+Runs after a manual Sync now finishes. Closed books are replaced right away. The book that is open
+is only interrupted for new chapters: the user is asked first, and the reader reloads it after the
+swap. A copy without new chapter text waits for a later sync with the book closed. Nothing runs
+until at least one library is chosen under BookOrbit > Fanfic updates.
 ]]
 local Store = require("bookorbit_fork_store")
 local Updates = require("bookorbit_fork_updates")
@@ -210,6 +211,13 @@ function UI.run(plugin, opts)
     if not temp then
         failures = failures + 1
         log("warn", "BookOrbit fork: could not download update for open book:", err)
+        finish(nil)
+        return
+    end
+    local measure = Updates.measure(open_item.path, temp)
+    if measure.oldText and measure.newText and measure.newText <= measure.oldText then
+        Updates.deps.remove(temp)
+        log("info", "BookOrbit fork: open book has no new chapters, left for a later sync:", open_item.path)
         finish(nil)
         return
     end

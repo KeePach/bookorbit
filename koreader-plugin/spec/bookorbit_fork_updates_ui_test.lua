@@ -147,6 +147,17 @@ lastShown("confirm").cancel_callback()
 assert(#installs == 0 and removed[1] == "/b/Open.epub.part", "declining removes the downloaded copy")
 assert(lastShown("info") == nil or not lastShown("info").text:find("Updated books", 1, true), "nothing is reported as updated")
 
+-- An open book whose copy has no new chapters is left for a later sync, without asking.
+reset()
+local real_measure = Updates.measure
+Updates.measure = function() return { oldText = 500, newText = 500, ratio = 1 } end
+found = { { path = "/b/Open.epub", title = "Open Fic", newHash = "n5" } }
+UI.run(plugin)
+Updates.measure = real_measure
+assert(lastShown("confirm") == nil, "the user is not asked")
+assert(#installs == 0 and removed[1] == "/b/Open.epub.part", "the download is removed and the book kept")
+assert(Store.open(client).account.paths["/b/Open.epub"].hash ~= "n5", "the book stays pending for a later sync")
+
 -- The menu offers the library choice and a manual check.
 local menu = UI.menuItem(plugin)
 assert(menu.text == "Fanfic updates" and #menu.sub_item_table == 2, "the menu has two entries")
