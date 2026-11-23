@@ -15,6 +15,7 @@ const file = (overrides: Partial<TrackedFile>): TrackedFile => ({
   title: 'Fic',
   fileHash: HASH,
   sizeBytes: 1234,
+  mtime: new Date('2026-11-20T10:00:00Z'),
   format: 'epub',
   role: 'content',
   mediaOverlayAvailable: false,
@@ -62,7 +63,7 @@ describe('FileUpdatesService.check', () => {
     expect(repository.findFiles).toHaveBeenCalledWith([1], [100, 200]);
   });
 
-  it('gives an updated file the hash, size and format to download', async () => {
+  it('gives an updated file the hash, size, change time and format to download', async () => {
     const { service } = build([file({})]);
 
     const { items } = await service.check(user, [{ bookFileId: 1, hash: OTHER }], [100]);
@@ -75,7 +76,16 @@ describe('FileUpdatesService.check', () => {
       status: 'updated',
       fileHash: HASH,
       sizeBytes: 1234,
+      mtimeMs: Date.parse('2026-11-20T10:00:00Z'),
       format: 'epub',
     });
+  });
+
+  it('sends a null change time when the file has none recorded', async () => {
+    const { service } = build([file({ mtime: null })]);
+
+    const { items } = await service.check(user, [{ bookFileId: 1, hash: OTHER }]);
+
+    expect(items[0]).toMatchObject({ status: 'updated', mtimeMs: null });
   });
 });

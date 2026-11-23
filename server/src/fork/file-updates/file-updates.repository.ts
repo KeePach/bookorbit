@@ -14,6 +14,7 @@ export interface TrackedFile {
   title: string | null;
   fileHash: string | null;
   sizeBytes: number | null;
+  mtime: Date | null;
   format: string | null;
   role: string;
   mediaOverlayAvailable: boolean;
@@ -39,6 +40,7 @@ export class FileUpdatesRepository {
         title: bookMetadata.title,
         fileHash: bookFiles.fileHash,
         sizeBytes: bookFiles.sizeBytes,
+        mtime: bookFiles.mtime,
         format: bookFiles.format,
         role: bookFiles.role,
         mediaOverlayAvailable: bookFiles.mediaOverlayAvailable,

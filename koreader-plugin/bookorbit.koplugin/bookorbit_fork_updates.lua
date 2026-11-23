@@ -103,6 +103,7 @@ function Updates.find(client, account, library_ids)
                             oldHash = on_disk,
                             newHash = result.fileHash,
                             sizeBytes = result.sizeBytes,
+                            contentMtimeMs = tonumber(result.mtimeMs),
                         })
                     end
                 end
@@ -145,15 +146,26 @@ local function swap(path, temp)
     return true
 end
 
--- Same handling as the fanficupdate plugin: a finished book goes back to reading and its percentage
--- is scaled by the size change (KOReader corrects it on open). Returns true when it was finished.
+-- A swap only brings new chapters when BookOrbit's file changed after the reader finished the book.
+-- The first swap of a Calibre copy, or a copy the reader already finished over USB, carries the same
+-- chapters, so a finished book stays finished. `summary.modified` is the day the status last changed.
+-- Without both dates nothing can be told apart, and the book is left as it is.
+function Updates.hasNewContent(summary, item)
+    local finished_on = type(summary.modified) == "string" and summary.modified:match("^(%d%d%d%d%-%d%d%-%d%d)") or nil
+    local changed_ms = tonumber(item.contentMtimeMs)
+    if not finished_on or not changed_ms then return false end
+    return os.date("%Y-%m-%d", math.floor(changed_ms / 1000)) > finished_on
+end
+
+-- A finished book with new chapters goes back to reading and its percentage is scaled by the size
+-- change (KOReader corrects it on open), as the fanficupdate plugin does. Returns true when it did.
 local function updateSidecar(path, item, old_size, new_size)
     local DocSettings = dep("DocSettings")
     if not DocSettings:hasSidecarFile(path) then return false end
     local settings = DocSettings:open(path)
     local reopened = false
     local summary = settings:readSetting("summary") or {}
-    if summary.status == "complete" then
+    if summary.status == "complete" and Updates.hasNewContent(summary, item) then
         summary.status = "reading"
         summary.modified = os.date("%Y-%m-%d")
         settings:saveSetting("summary", summary)

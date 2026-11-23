@@ -100,7 +100,7 @@ local function newServer(files)
                         table.insert(items, { bookFileId = item.bookFileId, status = "current" })
                     else
                         table.insert(items, { bookFileId = item.bookFileId, status = "updated", bookId = file.bookId,
-                            title = file.title, fileHash = file.content, sizeBytes = #file.content })
+                            title = file.title, fileHash = file.content, sizeBytes = #file.content, mtimeMs = file.mtimeMs })
                     end
                 end
                 return { items = items }
@@ -136,8 +136,10 @@ local account = {
         [GONE] = { bookFileId = 4, bookId = 40, hash = "whatever" },
     },
 }
+-- Noon UTC, so the local date is the same in every timezone the spec may run in.
+local NOV_20 = os.time({ year = 2026, month = 11, day = 20, hour = 12 }) * 1000
 local server = newServer({
-    [1] = { bookId = 10, title = "Fic", content = "bookorbit-copy-v2" },
+    [1] = { bookId = 10, title = "Fic", content = "bookorbit-copy-v2", mtimeMs = NOV_20 },
     [2] = { bookId = 20, title = "Current", content = "same-as-server" },
     [3] = { bookId = 30, title = "Novel", content = "novel-new", out_of_scope = true },
 })
@@ -152,6 +154,7 @@ assert(#pending == 1, "only the changed book in scope is pending")
 local item = pending[1]
 assert(item.path == FIC and item.oldHash == "calibre-copy-v1" and item.newHash == "bookorbit-copy-v2", "the pending book carries both hashes")
 assert(item.title == "Fic" and item.bookId == 10, "the server's title and book id are used")
+assert(item.contentMtimeMs == NOV_20, "the time BookOrbit's file changed comes along")
 
 -- A stale index hash whose file already matches the server is only corrected.
 writeAll(OTHER, "novel-new")
@@ -162,7 +165,7 @@ assert(#pending == 1 and pending[1].path == FIC, "a file that already matches is
 assert(account.paths[OTHER].hash == "novel-new", "its index hash is corrected")
 
 -- Download, check and swap in.
-sidecars[FIC] = { summary = { status = "complete" }, percent_finished = 1.0, partial_md5_checksum = "calibre-copy-v1" }
+sidecars[FIC] = { summary = { status = "complete", modified = "2026-11-01" }, percent_finished = 1.0, partial_md5_checksum = "calibre-copy-v1" }
 local baseline_file = ROOT .. "/settings/fanficupdate.lua"
 writeAll(baseline_file, "-- exists")
 luasettings_files[baseline_file] = { files = { [FIC] = { size = 15, mtime = 1 } } }
@@ -175,7 +178,7 @@ assert(server.downloads[1].opts.expected_bytes == #"bookorbit-copy-v2", "the ann
 local result = assert(Updates.install(account, item, temp))
 assert(readAll(FIC) == "bookorbit-copy-v2", "the book now holds BookOrbit's copy")
 assert(readAll(temp) == nil and readAll(FIC .. ".bookorbit-old") == nil, "no temp or backup file is left behind")
-assert(result.reopened == true, "a finished book is reported as reopened")
+assert(result.reopened == true, "a book finished before BookOrbit's file changed is reported as reopened")
 local sidecar = sidecars[FIC]
 assert(sidecar.summary.status == "reading", "the finished book is back to reading")
 assert(math.abs(sidecar.percent_finished - 15 / 17) < 1e-9, "the percentage is scaled by the size change")
@@ -186,6 +189,24 @@ assert(state_calls[1][1] == "repair" and state_calls[1][2] == FIC and state_call
 assert(state_calls[2][1] == "link" and state_calls[2][2] == "bookorbit-copy-v2" and state_calls[2][3] == 1 and state_calls[2][4] == 10,
     "upstream's state links the new hash to the file")
 assert(account.paths[FIC].hash == "bookorbit-copy-v2", "the fork index has the new hash")
+
+-- A finished book only goes back to reading when BookOrbit's file changed after the day it was finished.
+assert(Updates.hasNewContent({ modified = "2026-11-19" }, { contentMtimeMs = NOV_20 }) == true, "changed the day after it was finished")
+assert(Updates.hasNewContent({ modified = "2026-11-20" }, { contentMtimeMs = NOV_20 }) == false, "changed the day it was finished counts as already read")
+assert(Updates.hasNewContent({ modified = "2026-11-21" }, { contentMtimeMs = NOV_20 }) == false, "finished after the change, as with a copy read over USB")
+assert(Updates.hasNewContent({}, { contentMtimeMs = NOV_20 }) == false, "no finish date leaves the book alone")
+assert(Updates.hasNewContent({ modified = "2026-11-19" }, {}) == false, "no change time leaves the book alone")
+
+-- The first swap of a Calibre copy the reader finished after its last update keeps it finished.
+writeAll(FIC, "calibre-copy-v2b")
+account.paths[FIC].hash = "calibre-copy-v2b"
+server.files[1].content = "bookorbit-copy-v2c"
+sidecars[FIC] = { summary = { status = "complete", modified = "2026-11-21" }, percent_finished = 1.0 }
+pending = Updates.find(server.client, account, { 7 })
+result = assert(Updates.install(account, pending[1], assert(Updates.download(server.client, pending[1]))))
+assert(result.reopened == false, "a same-chapters swap is not reported as reopened")
+assert(sidecars[FIC].summary.status == "complete" and sidecars[FIC].percent_finished == 1.0, "the finished book stays finished at 100%")
+assert(sidecars[FIC].partial_md5_checksum == "bookorbit-copy-v2c", "the cached hash still moves to the new copy")
 
 -- A book that was not finished keeps its status and percentage.
 writeAll(FIC, "calibre-copy-v3")

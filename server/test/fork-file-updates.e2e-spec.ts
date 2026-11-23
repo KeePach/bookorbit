@@ -115,6 +115,7 @@ describe('Fork: KOReader file updates (e2e)', { timeout: 180_000 }, () => {
     expect(items[0]).toMatchObject({ bookFileId: fic.bookFileId, status: 'current', bookId: fic.bookId });
     expect(items[0]).toHaveProperty('title');
     expect(items[1]).toMatchObject({ bookFileId: fic.bookFileId, status: 'updated', fileHash: ficHash, libraryId: fanfics.libraryId });
+    expect(typeof (items[1] as { mtimeMs?: unknown }).mtimeMs).toBe('number');
     expect(items[2]).toMatchObject({ bookFileId: novel.bookFileId, status: 'out_of_scope' });
     expect(items[3]).toEqual({ bookFileId: 999_999_999, status: 'missing' });
   });

@@ -23,6 +23,8 @@ export interface FileUpdateResult {
   title?: string | null;
   fileHash?: string;
   sizeBytes?: number | null;
+  /** When the stored file last changed, so a device can tell new content from a repackaged copy. */
+  mtimeMs?: number | null;
   format?: string | null;
 }
 
@@ -62,7 +64,14 @@ export class FileUpdatesService {
       if (scope && !scope.has(file.libraryId)) return { ...known, status: 'out_of_scope' };
       if (!file.fileHash || file.mediaOverlayAvailable) return { ...known, status: 'skipped' };
       if (file.fileHash.toLowerCase() === item.hash.toLowerCase()) return { ...known, status: 'current' };
-      return { ...known, status: 'updated', fileHash: file.fileHash, sizeBytes: file.sizeBytes, format: file.format };
+      return {
+        ...known,
+        status: 'updated',
+        fileHash: file.fileHash,
+        sizeBytes: file.sizeBytes,
+        mtimeMs: file.mtime?.getTime() ?? null,
+        format: file.format,
+      };
     });
 
     this.logger.log(
