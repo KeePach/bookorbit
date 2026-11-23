@@ -32,6 +32,7 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { MergedBookAliasInterceptor } from './common/interceptors/merged-book-alias.interceptor';
 import { GLOBAL_GUARDS } from './common/guards/global-guards';
 import { DbModule } from './db/db.module';
+import { ForkModule } from './fork/fork.module';
 import { AnnotationModule } from './modules/annotation/annotation.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { HealthModule } from './modules/health/health.module';
@@ -160,6 +161,7 @@ import { BulkRunsModule } from './modules/bulk-runs/bulk-runs.module';
       ],
     }),
     DbModule,
+    ForkModule,
     SeriesIdentityModule,
     CommonModule,
     LibraryScopeModule,
