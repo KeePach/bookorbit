@@ -157,23 +157,37 @@ function Updates.hasNewContent(summary, item)
     return os.date("%Y-%m-%d", math.floor(changed_ms / 1000)) > finished_on
 end
 
--- A finished book with new chapters goes back to reading and its percentage is scaled by the size
--- change (KOReader corrects it on open), as the fanficupdate plugin does. Returns true when it did.
-local function updateSidecar(path, item, old_size, new_size)
+-- How far through the new copy the old position sits. The position itself is a pointer into a
+-- chapter that new chapters do not move, so KOReader reopens on the same sentence and sets the exact
+-- percentage then; until it is opened, the old percentage scaled by the change in chapter text is
+-- close. File sizes are only the fallback, since images and fonts swamp them.
+function Updates.progressRatio(old_path, new_path, old_size, new_size)
+    local Epub = require("bookorbit_fork_epub")
+    local old_text, new_text = Epub.textSize(old_path), Epub.textSize(new_path)
+    if old_text and new_text then return old_text / new_text end
+    if old_size and old_size > 0 and new_size and new_size > 0 then return old_size / new_size end
+    return nil
+end
+
+-- A finished book with new chapters goes back to reading below 100%. A book in progress keeps its
+-- status and only has its percentage scaled. Returns true when a finished book was reopened.
+local function updateSidecar(path, item, ratio)
     local DocSettings = dep("DocSettings")
     if not DocSettings:hasSidecarFile(path) then return false end
     local settings = DocSettings:open(path)
     local reopened = false
     local summary = settings:readSetting("summary") or {}
-    if summary.status == "complete" and Updates.hasNewContent(summary, item) then
-        summary.status = "reading"
-        summary.modified = os.date("%Y-%m-%d")
-        settings:saveSetting("summary", summary)
-        local percent = settings:readSetting("percent_finished")
-        if percent and old_size and old_size > 0 and new_size and new_size > 0 then
-            settings:saveSetting("percent_finished", math.min(percent * old_size / new_size, 0.99))
+    local percent = tonumber(settings:readSetting("percent_finished"))
+    if summary.status == "complete" then
+        if Updates.hasNewContent(summary, item) then
+            summary.status = "reading"
+            summary.modified = os.date("%Y-%m-%d")
+            settings:saveSetting("summary", summary)
+            if percent and ratio then settings:saveSetting("percent_finished", math.min(percent * ratio, 0.99)) end
+            reopened = true
         end
-        reopened = true
+    elseif percent and ratio and ratio ~= 1 then
+        settings:saveSetting("percent_finished", math.min(percent * ratio, 1))
     end
     settings:saveSetting("partial_md5_checksum", item.newHash)
     settings:flush()
@@ -213,6 +227,9 @@ end
 function Updates.install(account, item, temp)
     local lfs = dep("lfs")
     local old_attributes = lfs.attributes(item.path) or {}
+    local temp_attributes = lfs.attributes(temp) or {}
+    local ratio_ok, ratio = pcall(Updates.progressRatio, item.path, temp, old_attributes.size, temp_attributes.size)
+    if not ratio_ok then ratio = nil end
     local ok, err = swap(item.path, temp)
     if not ok then
         dep("remove")(temp)
@@ -221,7 +238,7 @@ function Updates.install(account, item, temp)
     local new_attributes = lfs.attributes(item.path) or {}
 
     local reopened = false
-    local sidecar_ok, sidecar_result = pcall(updateSidecar, item.path, item, old_attributes.size, new_attributes.size)
+    local sidecar_ok, sidecar_result = pcall(updateSidecar, item.path, item, ratio)
     if sidecar_ok then reopened = sidecar_result else log("warn", "BookOrbit fork: sidecar not updated:", sidecar_result) end
     updateFanficBaseline(item.path, new_attributes)
     tellUpstreamState(item)

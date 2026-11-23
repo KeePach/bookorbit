@@ -208,15 +208,16 @@ assert(result.reopened == false, "a same-chapters swap is not reported as reopen
 assert(sidecars[FIC].summary.status == "complete" and sidecars[FIC].percent_finished == 1.0, "the finished book stays finished at 100%")
 assert(sidecars[FIC].partial_md5_checksum == "bookorbit-copy-v2c", "the cached hash still moves to the new copy")
 
--- A book that was not finished keeps its status and percentage.
+-- A book in progress keeps its status; its percentage is scaled (by file size here, as these
+-- fake books are not zip files).
 writeAll(FIC, "calibre-copy-v3")
 account.paths[FIC].hash = "calibre-copy-v3"
-server.files[1].content = "bookorbit-copy-v4"
+server.files[1].content = "bookorbit-copy-v4-longer"
 sidecars[FIC] = { summary = { status = "reading" }, percent_finished = 0.5 }
 pending = Updates.find(server.client, account, { 7 })
 result = assert(Updates.install(account, pending[1], assert(Updates.download(server.client, pending[1]))))
-assert(result.reopened == false and sidecars[FIC].summary.status == "reading" and sidecars[FIC].percent_finished == 0.5,
-    "a book in progress is left as it was")
+assert(result.reopened == false and sidecars[FIC].summary.status == "reading", "a book in progress keeps its status")
+assert(math.abs(sidecars[FIC].percent_finished - 0.5 * 15 / 24) < 1e-9, "its percentage is scaled to the longer copy")
 
 -- A download whose hash does not match is thrown away.
 writeAll(FIC, "calibre-copy-v5")
@@ -260,6 +261,51 @@ stats_error = "locked"
 server.requests = {}
 assert(Updates.releaseUnreadLinks(server.client, { { oldHash = "unread-copy", bookFileId = 1 } }) == 0, "unreadable statistics release nothing")
 assert(#server.requests == 0, "no request when statistics cannot be read")
+
+-- Real EPUB zips: the percentage follows the chapter text, not images or the file size.
+local function zipOf(entries)
+    local parts, directory, offset = {}, {}, 0
+    local function u16(n) return string.char(n % 256, math.floor(n / 256) % 256) end
+    local function u32(n) return u16(n % 65536) .. u16(math.floor(n / 65536)) end
+    for _, entry in ipairs(entries) do
+        local name, data = entry[1], entry[2]
+        local header = "PK\3\4" .. u16(20) .. u16(0) .. u16(0) .. u32(0) .. u32(0) .. u32(#data) .. u32(#data)
+            .. u16(#name) .. u16(0) .. name
+        table.insert(parts, header .. data)
+        table.insert(directory, "PK\1\2" .. u16(20) .. u16(20) .. u16(0) .. u16(0) .. u32(0) .. u32(0)
+            .. u32(#data) .. u32(#data) .. u16(#name) .. u16(0) .. u16(0) .. u16(0) .. u16(0) .. u32(0) .. u32(offset) .. name)
+        offset = offset + #header + #data
+    end
+    local body, central = table.concat(parts), table.concat(directory)
+    return body .. central .. "PK\5\6" .. u16(0) .. u16(0) .. u16(#entries) .. u16(#entries)
+        .. u32(#central) .. u32(#body) .. u16(0)
+end
+local Epub = require("bookorbit_fork_epub")
+local IMAGE = string.rep("i", 5000)
+local OLD_EPUB, NEW_EPUB = ROOT .. "/old.epub", ROOT .. "/new.epub"
+writeAll(OLD_EPUB, zipOf({ { "mimetype", "application/epub+zip" }, { "OEBPS/cover.jpg", IMAGE },
+    { "OEBPS/file0001.xhtml", string.rep("a", 900) }, { "content.opf", "<package/>" } }))
+writeAll(NEW_EPUB, zipOf({ { "mimetype", "application/epub+zip" }, { "OEBPS/cover.jpg", IMAGE },
+    { "OEBPS/file0001.xhtml", string.rep("a", 900) }, { "OEBPS/File0002.XHTML", string.rep("b", 100) },
+    { "content.opf", "<package version='longer'/>" } }))
+assert(Epub.textSize(OLD_EPUB) == 900 and Epub.textSize(NEW_EPUB) == 1000, "only (X)HTML entries are counted")
+assert(Epub.textSize(FIC) == nil and Epub.textSize(ROOT .. "/missing.epub") == nil, "a file that is not a zip has no text size")
+local ratio = Updates.progressRatio(OLD_EPUB, NEW_EPUB, 1, 1)
+assert(math.abs(ratio - 0.9) < 1e-9, "a finished book with one new chapter of ten lands at 90%")
+assert(Updates.progressRatio(FIC, ROOT .. "/missing.epub", 10, 20) == 0.5, "without zips the file sizes are used")
+assert(Updates.progressRatio(FIC, ROOT .. "/missing.epub", nil, 20) == nil, "without either nothing is estimated")
+
+local ZIPPED = ROOT .. "/Fanfic/Zipped - Author.epub"
+writeAll(ZIPPED, readAll(OLD_EPUB))
+account.paths[ZIPPED] = { bookFileId = 5, bookId = 50, hash = readAll(OLD_EPUB) }
+server.files[5] = { bookId = 50, title = "Zipped", content = readAll(NEW_EPUB), mtimeMs = NOV_20 }
+sidecars[ZIPPED] = { summary = { status = "complete", modified = "2026-11-01" }, percent_finished = 1.0 }
+pending = Updates.find(server.client, account, { 7 })
+local zipped_item
+for _, candidate in ipairs(pending) do if candidate.path == ZIPPED then zipped_item = candidate end end
+result = assert(Updates.install(account, zipped_item, assert(Updates.download(server.client, zipped_item))))
+assert(result.reopened == true and sidecars[ZIPPED].summary.status == "reading", "the finished book with a new chapter is reopened")
+assert(math.abs(sidecars[ZIPPED].percent_finished - 0.9) < 1e-9, "100% of the old text is 90% of the new one")
 
 os.execute("rm -rf '" .. ROOT .. "'")
 print("bookorbit_fork_updates_test: ok")
