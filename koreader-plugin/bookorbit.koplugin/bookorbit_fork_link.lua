@@ -9,11 +9,8 @@ create the link through its own existing path; already matched hashes are never 
 
 The path index is this fork's own settings file, so upstream's sync state is only ever read.
 ]]
-local DataStorage = require("datastorage")
-local LuaSettings = require("luasettings")
-local lfs = require("libs/libkoreader-lfs")
-
 local Calibre = require("bookorbit_fork_calibre")
+local Store = require("bookorbit_fork_store")
 
 local Link = {}
 
@@ -22,56 +19,12 @@ local function log(level, ...)
     if ok and type(logger) == "table" and type(logger[level]) == "function" then pcall(logger[level], ...) end
 end
 
-Link.STATE_FILE = "bookorbit_fork_state.lua"
+Link.STATE_FILE = Store.FILE
 Link.RESOLVE_PATH = "/koreader/plugin/fork/calibre-resolve"
 local RESOLVE_BATCH = 500
 
 -- server_url -> true once the server answered that it has no resolve endpoint.
 local resolve_unsupported = {}
-
-local function settingsPath(name)
-    return DataStorage:getSettingsDir() .. "/" .. name
-end
-
-local function accountKey(client)
-    return tostring(client.server_url or "") .. "|" .. tostring(client.username or "")
-end
-
--- Upstream's sync state already knows the path and file id of every matched book; reading it once
--- lets books that changed before this fork code was installed relink by path too.
-local function seedFromUpstreamState()
-    local paths = {}
-    local dir = DataStorage:getSettingsDir()
-    local ok, iter, dir_obj = pcall(lfs.dir, dir)
-    if not ok then return paths end
-    for name in iter, dir_obj do
-        if name:match("^bookorbit_sync_state.*%.lua$") then
-            local read_ok, settings = pcall(LuaSettings.open, LuaSettings, dir .. "/" .. name)
-            local books = read_ok and settings:readSetting("books") or nil
-            for hash, book in pairs(type(books) == "table" and books or {}) do
-                if type(book) == "table" and type(book.file) == "string" and book.fileId then
-                    paths[book.file] = paths[book.file] or { bookFileId = book.fileId, bookId = book.bookId, hash = hash }
-                end
-            end
-        end
-    end
-    return paths
-end
-
-local function openAccount(client)
-    local settings = LuaSettings:open(settingsPath(Link.STATE_FILE))
-    local accounts = settings:readSetting("accounts") or {}
-    local key = accountKey(client)
-    local account = accounts[key]
-    if type(account) ~= "table" then
-        account = { paths = seedFromUpstreamState() }
-        accounts[key] = account
-        settings:saveSetting("accounts", accounts)
-        settings:flush()
-    end
-    account.paths = account.paths or {}
-    return settings, accounts, account
-end
 
 local function currentDocument()
     local ok, ReaderUI = pcall(require, "apps/reader/readerui")
@@ -118,7 +71,7 @@ function Link.enrich(client, hashes, candidates)
     local filled = {}
     if type(candidates) ~= "table" or #hashes == 0 then return filled end
     Calibre.forgetMisses()
-    local _settings, _accounts, account = openAccount(client)
+    local account = Store.open(client).account
 
     local by_uuid, uuids, by_path = {}, {}, {}
     for _, hash in ipairs(hashes) do
@@ -159,7 +112,8 @@ end
 --- Remembers the path of every matched book, so the next version of its file links by path.
 function Link.learn(client, hashes, candidates, body)
     if type(candidates) ~= "table" or type(body) ~= "table" or type(body.matches) ~= "table" then return end
-    local settings, accounts, account = openAccount(client)
+    local store = Store.open(client)
+    local account = store.account
     local changed = false
     for _, match in ipairs(body.matches) do
         local candidate = type(match) == "table" and candidates[match.hash]
@@ -172,10 +126,7 @@ function Link.learn(client, hashes, candidates, body)
             end
         end
     end
-    if changed then
-        settings:saveSetting("accounts", accounts)
-        settings:flush()
-    end
+    if changed then store.save() end
 end
 
 --- Wraps a match check: the regular check first, then one more for the hashes this module could link.
