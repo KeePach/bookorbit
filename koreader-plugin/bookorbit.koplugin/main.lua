@@ -1495,5 +1495,6 @@ end
 
 BookOrbit.onPowerOff = BookOrbit.tearDownBackgroundWork
 BookOrbit.onReboot = BookOrbit.tearDownBackgroundWork
+local fork_ok, Fork = pcall(require, "bookorbit_fork") if fork_ok then Fork.install(BookOrbit) end
 
 return BookOrbit
