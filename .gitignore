@@ -40,3 +40,4 @@ test-results/
 # vite-plugin-pwa dev service worker output
 dev-dist
 *.patch
+*.patch
