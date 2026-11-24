@@ -193,6 +193,7 @@ Full documentation lives at **[bookorbit.app](https://bookorbit.app/what-is-book
 - **AI providers**: connect OpenAI, Anthropic, Gemini, OpenRouter, a proxy or a local runner for AI features such as story guides, and the `AI_ENCRYPTION_KEY` that keeps provider keys encrypted. See [docs/AI_PROVIDERS.md](docs/AI_PROVIDERS.md).
 - **Read-aloud**: optional STAlign generation and QuartzNet hardware acceleration. See [docs/READ_ALOUD.md](docs/READ_ALOUD.md).
 - **API keys**: script and automation access with read-only, permission and library limits. See [docs/API_KEYS.md](docs/API_KEYS.md).
+- **App attestation**: why a few features answer only the official iOS and Android apps, and what stays open to every client. See [docs/APP_ATTESTATION.md](docs/APP_ATTESTATION.md).
 - **Jobs and bulk actions**: the Jobs page for long-running work, and bulk actions that keep running after the tab closes. See [docs/JOBS.md](docs/JOBS.md).
 - **External metadata providers**: add a source that runs beside BookOrbit, such as FantLab or MangaBaka, with [docs/METADATA_PROVIDERS.md](docs/METADATA_PROVIDERS.md), or build your own with [docs/BUILDING_METADATA_PROVIDERS.md](docs/BUILDING_METADATA_PROVIDERS.md).
 
@@ -275,7 +276,7 @@ Questions are welcome, even if you are unsure whether something is a bug. Share 
 
 ## 🙏 Credits
 
-BookOrbit's read-aloud generation is built on the work of the [Storyteller](https://gitlab.com/storyteller-platform/storyteller) project. Its open-source libraries, `@storyteller-platform/align` and `@storyteller-platform/ghost-story`, align an ebook with its audiobook to produce the EPUB 3 read-along, and the QuartzNet alignment models come from Storyteller's model registry. Many thanks to the Storyteller team for their incredible work.
+BookOrbit's read-aloud generation is built on the work of the [Storyteller](https://gitlab.com/storyteller-platform/storyteller) project. Its open-source libraries, `@storyteller/align` and `@storyteller/ghost-story`, align an ebook with its audiobook to produce the EPUB 3 read-along, and the QuartzNet alignment models come from Storyteller's model registry. Many thanks to the Storyteller team for their incredible work.
 
 <a id="license-and-attribution"></a>
 

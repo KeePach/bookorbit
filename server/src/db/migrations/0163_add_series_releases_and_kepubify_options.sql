@@ -1,5 +1,5 @@
--- Fork migrations 0145-0148 (kepubify options, series releases) were renumbered here after upstream
--- took those numbers; databases that already ran them must treat every statement as a no-op.
+-- Fork migrations (kepubify options, series releases) renumbered to 0163 on 2026-11-24 after upstream
+-- took 0162 (book editions); databases that already ran them must treat every statement as a no-op.
 CREATE TABLE IF NOT EXISTS "series_license_settings" (
 	"id" integer PRIMARY KEY DEFAULT 1 NOT NULL,
 	"library_ids" integer[] DEFAULT '{}' NOT NULL,
@@ -85,3 +85,20 @@ DO $$ BEGIN
 		ALTER TABLE "kobo_sync_settings" ADD CONSTRAINT "kobo_sync_settings_kepub_custom_css_length_chk" CHECK (char_length("kobo_sync_settings"."kepub_custom_css") <= 10000);
 	END IF;
 END $$;
+--> statement-breakpoint
+-- Repairs upstream 0143 and 0144: databases from the old fork numbering skipped them because their
+-- ledger held fork rows dated after both. A no-op wherever they already ran.
+CREATE TABLE IF NOT EXISTS "koreader_device_names" (
+    "user_id" integer NOT NULL,
+    "device_id" varchar(100) NOT NULL,
+    "name" varchar(100) NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT "koreader_device_names_user_id_device_id_pk" PRIMARY KEY("user_id","device_id")
+);
+--> statement-breakpoint
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'koreader_device_names_user_id_users_id_fk') THEN
+        ALTER TABLE "koreader_device_names" ADD CONSTRAINT "koreader_device_names_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+    END IF;
+END $$;--> statement-breakpoint
+ALTER TABLE "download_clients" ADD COLUMN IF NOT EXISTS "remove_completed_downloads" boolean DEFAULT false NOT NULL;

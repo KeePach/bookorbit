@@ -143,6 +143,7 @@ export interface MetadataPatch {
   publisher?: string | null
   publishedDate?: string | null
   publishedYear?: number | null
+  originalPublishedYear?: number | null
   language?: string | null
   pageCount?: number | null
   communityRatings?: Array<Pick<BookCommunityRating, 'provider' | 'rating' | 'ratingCount'>>
@@ -630,6 +631,10 @@ export function useMetadataDiff(input: MetadataDiffInput) {
       }
       if (key === 'pageCount') {
         formPatch.pageCount = candidate.pageCount ?? null
+        continue
+      }
+      if (key === 'originalPublishedYear') {
+        formPatch.originalPublishedYear = candidate.originalPublishedYear ?? null
         continue
       }
       if (key === 'seriesIndex') {
