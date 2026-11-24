@@ -11,6 +11,7 @@ import { CalibreRefsRepository } from './calibre-refs/calibre-refs.repository';
 import { CalibreRefsService } from './calibre-refs/calibre-refs.service';
 import { FileUpdatesRepository } from './file-updates/file-updates.repository';
 import { FileUpdatesService } from './file-updates/file-updates.service';
+import { forkSchemaProvider } from './fork-schema';
 import { KoreaderForkController } from './koreader-fork.controller';
 
 /**
@@ -20,6 +21,14 @@ import { KoreaderForkController } from './koreader-fork.controller';
 @Module({
   imports: [CommonModule, UserModule, KoreaderModule, BookModule, UserBookStatusModule],
   controllers: [KoreaderForkController],
-  providers: [KoreaderAuthGuard, CalibreRefsRepository, CalibreRefsIndexerService, CalibreRefsService, FileUpdatesRepository, FileUpdatesService],
+  providers: [
+    forkSchemaProvider,
+    KoreaderAuthGuard,
+    CalibreRefsRepository,
+    CalibreRefsIndexerService,
+    CalibreRefsService,
+    FileUpdatesRepository,
+    FileUpdatesService,
+  ],
 })
 export class ForkModule {}
