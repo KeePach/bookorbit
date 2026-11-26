@@ -3,11 +3,12 @@
 ARG KCC_TAG=v13.0.4
 FROM ghcr.io/ciromattia/kcc:${KCC_TAG}
 
-# KCC's image only has p7zip-full, which Debian builds without RAR support. bsdtar (libarchive)
-# lets KCC open CBR files; KCC tries it before 7z.
-RUN apt-get update -y && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libarchive-tools && \
-    rm -rf /var/lib/apt/lists/*
+# KCC's image only has Debian's p7zip-full, which can't open RAR, so CBR files fail. This puts the
+# official 7-Zip (checksum-pinned, from github.com/ip7z/7zip) first on the PATH as `7z`.
+COPY install-7zip.py /opt/fork-kcc/install-7zip.py
+RUN python /opt/fork-kcc/install-7zip.py && \
+    test "$(command -v 7z)" = /usr/local/bin/7z && \
+    7z i | head -n 2
 
 ENV PYTHONPATH=/opt/kcc
 

@@ -6,8 +6,9 @@ image plus `server.py`, a small HTTP front that BookOrbit calls.
 
 What the Dockerfile adds to KCC's image:
 
-- `libarchive-tools` (bsdtar), so KCC can open CBR files. The image's `p7zip-full` is Debian's
-  build without RAR support.
+- The official 7-Zip as `7z` (`install-7zip.py`, checksum-pinned), so KCC can open CBR files. The
+  image's `p7zip-full` is Debian's build without RAR support, and apt can't install anything else:
+  Debian 11's security mirror returns 404 for its packages.
 - A stand-in for `PySide6.QtCore`, only if the real one is missing. KCC 13.0.0 to 13.0.4 import it in
   the converter, but the Docker image doesn't install it, so `c2e` fails at startup without this.
 
