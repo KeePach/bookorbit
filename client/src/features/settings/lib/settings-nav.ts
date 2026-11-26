@@ -44,6 +44,7 @@ import {
   Type,
   User,
   Users,
+  Wand2,
   Wrench,
   Zap,
 } from '@lucide/vue'
@@ -416,6 +417,15 @@ export const SETTINGS_NAV: readonly SettingsNavGroup[] = [
         icon: Smartphone,
         keywords: 'koreader progress sync credentials position',
         isVisible: anyPermission(Permission.KoreaderSync),
+      },
+      {
+        id: 'fork-kcc',
+        routeName: 'settings-fork-kcc',
+        labelKey: 'forkKcc.nav',
+        descriptionKey: 'forkKcc.navDescription',
+        icon: Wand2,
+        keywords: 'kcc kindle comic converter manga cbz convert preset',
+        isVisible: anyPermission(Permission.LibraryEditMetadata),
       },
       {
         id: 'opds',

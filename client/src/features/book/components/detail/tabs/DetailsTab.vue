@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import KccConvertDialogHost from '@/features/fork-kcc/components/KccConvertDialogHost.vue'
+import KccConvertMenuItem from '@/features/fork-kcc/components/KccConvertMenuItem.vue'
 import { formatDate as formatLocaleDate } from '@/i18n/formatters'
 import { formatBytes as formatFileSize } from '@/lib/formatting'
 import { useRouter } from 'vue-router'
@@ -1118,6 +1120,11 @@ function handleEditMetadataFromScore() {
   router.push({ name: 'book-detail', params: { bookId: props.book.id }, query: { tab: 'edit' } })
 }
 
+function handleKccFromMenu() {
+  moreMenuOpen.value = false
+  mobileMoreMenuOpen.value = false
+}
+
 function handleMoveFromMenu() {
   moreMenuOpen.value = false
   mobileMoreMenuOpen.value = false
@@ -1741,6 +1748,13 @@ watch(
                   <FolderInput class="size-3.5 shrink-0" />
                   {{ t('book.move.action') }}
                 </button>
+                <KccConvertMenuItem
+                  v-if="canEditMetadata"
+                  :book-id="book.id"
+                  :title="book.title ?? ''"
+                  :files="book.files"
+                  @select="handleKccFromMenu"
+                />
                 <button
                   v-if="canMergeBook"
                   class="flex w-full items-center gap-2 px-2 py-1.5 text-start rounded-xs text-sm text-foreground hover:bg-muted transition-colors"
@@ -2550,6 +2564,7 @@ watch(
     @done="void loadSupplemental()"
   />
 
+  <KccConvertDialogHost />
   <SendBookDialog
     v-model:open="showSendDialog"
     :selection-payload="{ bookIds: [book.id] }"

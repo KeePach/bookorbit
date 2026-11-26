@@ -405,6 +405,12 @@ export const routes: RouteRecordRaw[] = [
             meta: { maxWidth: 'max-w-4xl', title: () => t('titles.koreaderSync') },
           },
           {
+            path: 'kcc',
+            name: 'settings-fork-kcc',
+            component: () => import('@/features/fork-kcc/views/KccSettings.vue'),
+            meta: { maxWidth: 'max-w-4xl', title: () => t('forkKcc.title') },
+          },
+          {
             path: 'opds',
             name: 'settings-opds',
             component: () => import('@/features/settings/OpdsSettings.vue'),

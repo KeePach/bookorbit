@@ -12,6 +12,7 @@ import { CalibreRefsService } from './calibre-refs/calibre-refs.service';
 import { FileUpdatesRepository } from './file-updates/file-updates.repository';
 import { FileUpdatesService } from './file-updates/file-updates.service';
 import { forkSchemaProvider } from './fork-schema';
+import { KccModule } from './kcc/kcc.module';
 import { KoreaderForkController } from './koreader-fork.controller';
 
 /**
@@ -19,7 +20,7 @@ import { KoreaderForkController } from './koreader-fork.controller';
  * touch it; app.module.ts only registers it.
  */
 @Module({
-  imports: [CommonModule, UserModule, KoreaderModule, BookModule, UserBookStatusModule],
+  imports: [CommonModule, UserModule, KoreaderModule, BookModule, UserBookStatusModule, KccModule],
   controllers: [KoreaderForkController],
   providers: [
     forkSchemaProvider,
