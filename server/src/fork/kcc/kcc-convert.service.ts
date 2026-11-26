@@ -4,7 +4,15 @@ import { randomUUID } from 'node:crypto';
 import { copyFile, mkdir, rm, stat } from 'node:fs/promises';
 import { basename, extname, join, relative } from 'node:path';
 
-import { CBX_BOOK_FILE_WRITE_FIELDS, type KccConvertCheck, type KccConvertJob, type KccConvertRequest, type KccOptionValues } from '@bookorbit/types';
+import {
+  CBX_BOOK_FILE_WRITE_FIELDS,
+  type KccBatchConvertResult,
+  type KccBatchSkip,
+  type KccConvertCheck,
+  type KccConvertJob,
+  type KccConvertRequest,
+  type KccOptionValues,
+} from '@bookorbit/types';
 
 import { buildNameExcludeMatcher } from '../../common/fs-walk.utils';
 import type { RequestUser } from '../../common/types/request-user';
@@ -25,6 +33,8 @@ import { type KccBookFile, KccRepository } from './kcc.repository';
 /** Formats KCC reads (with bsdtar/7z in its container) and BookOrbit offers to convert. */
 export const KCC_SOURCE_FORMATS = new Set(['cbz', 'cbr', 'cb7', 'pdf']);
 const FINISHED_JOB_TTL_MS = 6 * 3600_000;
+const MAX_LISTED_JOBS = 1000;
+export const MAX_BATCH_BOOKS = 500;
 const COMIC_INFO_FIELDS = new Set<BookWritePayloadKey>(CBX_BOOK_FILE_WRITE_FIELDS as readonly BookWritePayloadKey[]);
 
 interface JobRecord extends KccConvertJob {
@@ -139,12 +149,44 @@ export class KccConvertService {
     return this.toDto(job);
   }
 
-  /** The user's conversions that haven't finished, so a reloaded page can show them again. */
-  activeJobs(user: RequestUser): KccConvertJob[] {
+  /**
+   * The user's conversions BookOrbit still remembers (running, and finished in the last hours), oldest
+   * first. One request is enough for the corner card to follow a whole batch.
+   */
+  listJobs(user: RequestUser): KccConvertJob[] {
     return [...this.jobs.values()]
-      .filter((job) => job.userId === user.id && (job.state === 'queued' || job.state === 'running'))
+      .filter((job) => job.userId === user.id)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .slice(-MAX_LISTED_JOBS)
       .map((job) => this.toDto(job));
+  }
+
+  /**
+   * Queues one conversion per book with the same settings. A book that can't be converted that way
+   * (format, library settings, already converted without force) is skipped with the reason instead
+   * of stopping the batch.
+   */
+  async startMany(user: RequestUser, bookIds: number[], request: KccConvertRequest): Promise<KccBatchConvertResult> {
+    const startedAt = Date.now();
+    const unique = [...new Set(bookIds)];
+    this.logger.log(
+      `[fork.kcc.batch] [start] userId=${user.id} books=${unique.length} mode=${request.mode} force=${Boolean(request.force)} - batch started`,
+    );
+    await this.resolveOptions(user, request);
+    const jobs: KccConvertJob[] = [];
+    const skipped: KccBatchSkip[] = [];
+    for (const bookId of unique) {
+      try {
+        jobs.push(await this.start(user, bookId, request));
+      } catch (error) {
+        const file = await this.repo.findBookFile(bookId).catch(() => null);
+        skipped.push({ bookId, title: file?.title ?? null, reason: this.errorMessage(error) });
+      }
+    }
+    this.logger.log(
+      `[fork.kcc.batch] [end] userId=${user.id} queued=${jobs.length} skipped=${skipped.length} durationMs=${Date.now() - startedAt} - batch queued`,
+    );
+    return { jobs, skipped };
   }
 
   latestJob(user: RequestUser, bookId: number): KccConvertJob | null {

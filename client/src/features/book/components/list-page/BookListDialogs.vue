@@ -8,13 +8,14 @@ import MetadataExportDialog from '@/features/book/components/MetadataExportDialo
 import MoveToLibrarySheet from '@/features/book/components/MoveToLibrarySheet.vue'
 import AddToCollectionSheet from '@/features/collection/components/AddToCollectionSheet.vue'
 import SendBookDialog from '@/features/email/components/SendBookDialog.vue'
+import { useKccConvertDialog } from '@/features/fork-kcc/composables/useKccConvertDialog'
 import type { BookListPage } from '@/features/book/composables/useBookListPage'
 
 const MergeBooksSheet = defineAsyncComponent(() => import('@/features/book/components/merge/MergeBooksSheet.vue'))
 const LinkBooksSheet = defineAsyncComponent(() => import('@/features/book/components/link/LinkBooksSheet.vue'))
 
 /** The selection bar and every sheet and dialog a book listing opens from it or from a book's menu. */
-defineProps<{
+const props = defineProps<{
   page: BookListPage
   /** Offers "Remove from collection" in the selection bar. */
   inCollection?: boolean
@@ -24,6 +25,13 @@ const emit = defineEmits<{ removeFromCollection: [] }>()
 
 function handleRemoveFromCollection() {
   emit('removeFromCollection')
+}
+
+const kccDialog = useKccConvertDialog()
+
+function handleKccConvert() {
+  const bookIds = [...props.page.selectedIds]
+  kccDialog.open({ bookIds, title: bookIds.length === 1 ? '1 book' : `${bookIds.length} books` })
 }
 </script>
 
@@ -61,6 +69,7 @@ function handleRemoveFromCollection() {
     @lock-metadata="page.handleBulkSetMetadataLock"
     @delete="page.handleDeleteSelected"
     @move-to-library="page.openMoveForSelection"
+    @kcc-convert="handleKccConvert"
     @merge="page.openMergeForSelection"
     @link="page.openLinkForSelection"
     @exit="page.exitSelectionMode"

@@ -7,6 +7,7 @@ import {
   Download,
   FileSpreadsheet,
   FolderInput,
+  Wand2,
   Link2,
   FolderMinus,
   FolderPlus,
@@ -111,6 +112,8 @@ const emit = defineEmits<{
   'set-field': [field: BulkEditableField, value: BulkEditableValue]
   'lock-metadata': [locked: boolean]
   'move-to-library': []
+  /** Fork: convert the selected comics with KCC. */
+  'kcc-convert': []
   merge: []
   link: []
   delete: [includeOtherEditions: boolean]
@@ -313,6 +316,11 @@ function confirmEmbedAudioCover() {
 
 function cancelEmbedAudioCover() {
   embedConfirmOpen.value = false
+}
+
+function onKccConvert() {
+  if (props.count === 0) return
+  emit('kcc-convert')
 }
 
 function onMoveToLibrary() {
@@ -642,6 +650,10 @@ watch(
                         <DropdownMenuItem data-testid="action-move-to-library" @click="onMoveToLibrary">
                           <FolderInput :size="14" />
                           <span>{{ t('book.move.action') }}</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem data-testid="action-kcc-convert" @click="onKccConvert">
+                          <Wand2 :size="14" />
+                          <span>Convert with KCC</span>
                         </DropdownMenuItem>
                       </template>
                       <template v-if="canMerge">

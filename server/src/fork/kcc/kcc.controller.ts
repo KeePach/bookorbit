@@ -1,11 +1,19 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseIntPipe, ParseUUIDPipe, Post, Put } from '@nestjs/common';
 
-import { Permission, type KccConvertCheck, type KccConvertJob, type KccOptionSchema, type KccPreset, type KccStatus } from '@bookorbit/types';
+import {
+  Permission,
+  type KccBatchConvertResult,
+  type KccConvertCheck,
+  type KccConvertJob,
+  type KccOptionSchema,
+  type KccPreset,
+  type KccStatus,
+} from '@bookorbit/types';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import type { RequestUser } from '../../common/types/request-user';
-import { KccConvertDto, KccPresetDto } from './dto/kcc.dto';
+import { KccBatchConvertDto, KccConvertDto, KccPresetDto } from './dto/kcc.dto';
 import { KccClientService } from './kcc-client.service';
 import { KccConvertService } from './kcc-convert.service';
 import { KccPresetsService } from './kcc-presets.service';
@@ -66,9 +74,15 @@ export class KccController {
     return this.converter.start(user, bookId, dto);
   }
 
+  @Post('convert')
+  convertMany(@CurrentUser() user: RequestUser, @Body() dto: KccBatchConvertDto): Promise<KccBatchConvertResult> {
+    const { bookIds, ...request } = dto;
+    return this.converter.startMany(user, bookIds, request);
+  }
+
   @Get('jobs')
-  activeJobs(@CurrentUser() user: RequestUser): KccConvertJob[] {
-    return this.converter.activeJobs(user);
+  listJobs(@CurrentUser() user: RequestUser): KccConvertJob[] {
+    return this.converter.listJobs(user);
   }
 
   @Get('jobs/:id')

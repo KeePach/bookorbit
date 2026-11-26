@@ -1,8 +1,19 @@
 import { computed, ref, watch } from 'vue'
-import type { KccConvertCheck, KccConvertJob, KccConvertMode, KccOptionSchema, KccOptionValues, KccPreset, KccStatus } from '@bookorbit/types'
+import type {
+  KccBatchConvertResult,
+  KccConvertCheck,
+  KccConvertJob,
+  KccConvertMode,
+  KccConvertRequest,
+  KccOptionSchema,
+  KccOptionValues,
+  KccPreset,
+  KccStatus,
+} from '@bookorbit/types'
 import { kccApi, kccErrorCode, kccErrorText } from '../lib/kcc-api'
-import { kccJobs, trackKccJob } from '../lib/kcc-job-tracker'
+import { kccProgress, trackKccJobs } from '../lib/kcc-job-tracker'
 
+const MAX_BATCH_BOOKS = 500
 const REMEMBER_KEY = 'bookorbit.fork.kcc.convert'
 
 interface Remembered {
@@ -27,17 +38,18 @@ function writeRemembered(value: Remembered): void {
   }
 }
 
-/** State of the Convert with KCC dialog for one book. */
+/** State of the Convert with KCC dialog, for one book or a batch. */
 export function useKccConvert() {
-  const bookId = ref<number | null>(null)
+  const bookIds = ref<number[]>([])
   const status = ref<KccStatus | null>(null)
   const check = ref<KccConvertCheck | null>(null)
   const presets = ref<KccPreset[]>([])
   const schema = ref<KccOptionSchema | null>(null)
   const jobId = ref<string | null>(null)
-  const job = computed<KccConvertJob | null>(() => (jobId.value ? (kccJobs.get(jobId.value) ?? null) : null))
+  const batchResult = ref<KccBatchConvertResult | null>(null)
   const loading = ref(false)
   const starting = ref(false)
+  const savingPreset = ref(false)
   const error = ref<string | null>(null)
 
   const mode = ref<KccConvertMode>('keep')
@@ -45,13 +57,16 @@ export function useKccConvert() {
   const customOptions = ref<KccOptionValues | null>(null)
   const force = ref(false)
 
+  const isBatch = computed(() => bookIds.value.length > 1)
+  const job = computed<KccConvertJob | null>(() => (jobId.value ? (kccProgress.jobs.get(jobId.value) ?? null) : null))
   const running = computed(() => job.value?.state === 'queued' || job.value?.state === 'running')
+  const selectedPreset = computed(() => presets.value.find((preset) => preset.id === presetId.value) ?? null)
   const needsForce = computed(() => {
-    if (!check.value) return false
+    if (isBatch.value || !check.value) return false
     return check.value.alreadyConverted || (mode.value === 'keep' && check.value.keepCopyExists)
   })
   const modeBlockedReason = computed(() => {
-    if (!check.value) return null
+    if (isBatch.value || !check.value) return null
     return mode.value === 'replace' ? check.value.replaceBlockedReason : check.value.keepBlockedReason
   })
   const canStart = computed(
@@ -59,50 +74,69 @@ export function useKccConvert() {
       !loading.value &&
       !starting.value &&
       !running.value &&
+      batchResult.value === null &&
       status.value?.reachable === true &&
-      check.value !== null &&
+      (isBatch.value || check.value !== null) &&
       modeBlockedReason.value === null &&
       (!needsForce.value || force.value),
   )
-  const selectedPreset = computed(() => presets.value.find((preset) => preset.id === presetId.value) ?? null)
 
-  // The tracker follows the job (and its toast); when it finishes, the file on disk changed.
+  // When a single book's conversion finishes, its file on disk changed.
   watch(
     () => job.value?.state,
     (state, previous) => {
       const finished = state === 'done' || state === 'failed'
       const wasRunning = previous === 'queued' || previous === 'running'
-      if (finished && wasRunning && bookId.value !== null) {
-        void kccApi.check(bookId.value).then((value) => {
+      if (finished && wasRunning && !isBatch.value && bookIds.value[0] !== undefined) {
+        void kccApi.check(bookIds.value[0]).then((value) => {
           check.value = value
         })
       }
     },
   )
 
-  async function load(id: number): Promise<void> {
-    bookId.value = id
+  function applyRemembered(checked: KccConvertCheck | null): void {
+    const remembered = readRemembered()
+    presetId.value = presets.value.some((preset) => preset.id === remembered?.presetId) ? remembered!.presetId : (presets.value[0]?.id ?? null)
+    const preferred = remembered?.mode ?? 'keep'
+    if (!checked) {
+      mode.value = preferred
+      return
+    }
+    const preferredBlocked = preferred === 'replace' ? !checked.canReplace : !checked.canKeep
+    mode.value = preferredBlocked ? (preferred === 'replace' ? 'keep' : 'replace') : preferred
+  }
+
+  async function load(ids: number[]): Promise<void> {
+    bookIds.value = ids
     loading.value = true
     error.value = null
     jobId.value = null
+    batchResult.value = null
+    check.value = null
     force.value = false
     customOptions.value = null
+    if (ids.length > MAX_BATCH_BOOKS) {
+      error.value = `KCC converts at most ${MAX_BATCH_BOOKS} books at a time. Select fewer.`
+      loading.value = false
+      return
+    }
     try {
       status.value = await kccApi.status()
-      const [checked, presetList, latest] = await Promise.all([kccApi.check(id), kccApi.presets(), kccApi.latestJob(id)])
-      check.value = checked
-      presets.value = presetList
-      if (latest.job) {
-        trackKccJob(latest.job)
-        jobId.value = latest.job.id
-      }
+      presets.value = await kccApi.presets()
       schema.value = status.value.reachable ? await kccApi.options() : null
-
-      const remembered = readRemembered()
-      presetId.value = presetList.some((preset) => preset.id === remembered?.presetId) ? remembered!.presetId : (presetList[0]?.id ?? null)
-      const preferred = remembered?.mode ?? 'keep'
-      const preferredBlocked = preferred === 'replace' ? !checked.canReplace : !checked.canKeep
-      mode.value = preferredBlocked ? (preferred === 'replace' ? 'keep' : 'replace') : preferred
+      const [single] = ids
+      if (ids.length === 1 && single !== undefined) {
+        const [checked, latest] = await Promise.all([kccApi.check(single), kccApi.latestJob(single)])
+        check.value = checked
+        if (latest.job) {
+          kccProgress.jobs.set(latest.job.id, latest.job)
+          jobId.value = latest.job.id
+        }
+        applyRemembered(checked)
+      } else {
+        applyRemembered(null)
+      }
     } catch (reason) {
       error.value = kccErrorText(reason)
     } finally {
@@ -110,28 +144,64 @@ export function useKccConvert() {
     }
   }
 
-  /** Starts editing options for this conversion only, from the selected preset. */
+  function selectPreset(id: number | null): void {
+    presetId.value = id
+    customOptions.value = null
+  }
+
+  /** Starts editing options, from the selected preset, for this conversion or to save. */
   function customize(): void {
     customOptions.value = { ...(selectedPreset.value?.options ?? {}) }
   }
 
+  async function savePreset(name: string | null): Promise<void> {
+    if (customOptions.value === null) return
+    savingPreset.value = true
+    error.value = null
+    try {
+      const options = customOptions.value
+      const saved =
+        name === null && selectedPreset.value
+          ? await kccApi.updatePreset(selectedPreset.value.id, { name: selectedPreset.value.name, options })
+          : await kccApi.createPreset({ name: (name ?? '').trim(), options })
+      presets.value = [...presets.value.filter((preset) => preset.id !== saved.id), saved].sort((a, b) => a.name.localeCompare(b.name))
+      presetId.value = saved.id
+      customOptions.value = null
+    } catch (reason) {
+      error.value = kccErrorText(reason)
+    } finally {
+      savingPreset.value = false
+    }
+  }
+
+  function request(): KccConvertRequest {
+    return {
+      mode: mode.value,
+      ...(customOptions.value !== null ? { options: customOptions.value } : presetId.value !== null ? { presetId: presetId.value } : {}),
+      ...(force.value ? { force: true } : {}),
+    }
+  }
+
   async function start(): Promise<void> {
-    if (!canStart.value || bookId.value === null) return
+    if (!canStart.value || bookIds.value.length === 0) return
     starting.value = true
     error.value = null
     try {
-      const started = await kccApi.convert(bookId.value, {
-        mode: mode.value,
-        ...(customOptions.value !== null ? { options: customOptions.value } : presetId.value !== null ? { presetId: presetId.value } : {}),
-        ...(force.value ? { force: true } : {}),
-      })
-      trackKccJob(started)
-      jobId.value = started.id
+      if (isBatch.value) {
+        const result = await kccApi.convertMany({ ...request(), bookIds: bookIds.value })
+        trackKccJobs(result.jobs)
+        batchResult.value = result
+      } else {
+        const started = await kccApi.convert(bookIds.value[0]!, request())
+        trackKccJobs([started])
+        jobId.value = started.id
+      }
       writeRemembered({ presetId: presetId.value, mode: mode.value })
     } catch (reason) {
       error.value = kccErrorText(reason)
-      if (kccErrorCode(reason) === 'KCC_ALREADY_CONVERTED' || kccErrorCode(reason) === 'KCC_COPY_EXISTS') {
-        check.value = await kccApi.check(bookId.value).catch(() => check.value)
+      const code = kccErrorCode(reason)
+      if (!isBatch.value && (code === 'KCC_ALREADY_CONVERTED' || code === 'KCC_COPY_EXISTS')) {
+        check.value = await kccApi.check(bookIds.value[0]!).catch(() => check.value)
       }
     } finally {
       starting.value = false
@@ -139,24 +209,30 @@ export function useKccConvert() {
   }
 
   return {
+    bookIds,
+    isBatch,
     status,
     check,
     presets,
     schema,
     job,
+    batchResult,
     loading,
     starting,
+    savingPreset,
     error,
     mode,
     presetId,
     customOptions,
     force,
     running,
-    needsForce,
+    selectedPreset,
     modeBlockedReason,
     canStart,
     load,
+    selectPreset,
     customize,
+    savePreset,
     start,
   }
 }

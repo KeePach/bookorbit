@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
-import { AlertTriangle, CheckCircle2, Loader2, Wand2, XCircle } from '@lucide/vue'
+import { computed, ref, watch } from 'vue'
+import { AlertTriangle, CheckCircle2, Loader2, Save, Wand2, XCircle } from '@lucide/vue'
 import { DialogContent, DialogDescription, DialogOverlay, DialogPortal, DialogRoot, DialogTitle } from 'reka-ui'
 import type { KccOptionValues } from '@bookorbit/types'
 import { Button } from '@/components/ui/button'
@@ -11,19 +11,36 @@ import { useKccConvertDialog } from '../composables/useKccConvertDialog'
 
 const { target, close } = useKccConvertDialog()
 const convert = useKccConvert()
-const { status, check, presets, schema, job, loading, starting, error, mode, presetId, customOptions, force, running, modeBlockedReason, canStart } =
-  convert
+const {
+  isBatch,
+  status,
+  check,
+  presets,
+  schema,
+  job,
+  batchResult,
+  loading,
+  starting,
+  savingPreset,
+  error,
+  mode,
+  presetId,
+  customOptions,
+  force,
+  running,
+  selectedPreset,
+  modeBlockedReason,
+  canStart,
+} = convert
 
+const newPresetName = ref('')
 const open = computed(() => target.value !== null)
 const presetValue = computed({
   get: () => (presetId.value === null ? '' : String(presetId.value)),
-  set: (value: string) => {
-    presetId.value = value === '' ? null : Number(value)
-    customOptions.value = null
-  },
+  set: (value: string) => convert.selectPreset(value === '' ? null : Number(value)),
 })
 const forceWarning = computed(() => {
-  if (!check.value) return null
+  if (isBatch.value || !check.value) return null
   if (check.value.alreadyConverted) return `${check.value.fileName} looks like it was already converted with KCC (its pages carry KCC's names).`
   if (mode.value === 'keep' && check.value.keepCopyExists) return `${check.value.keepCopyName} already exists and will be overwritten.`
   return null
@@ -34,11 +51,19 @@ const resultText = computed(() => {
     ? `${job.value.outputName} replaced the original in the book's folder. Drag it to your Kobo.`
     : `${job.value.outputName} is next to the original. Drag it to your Kobo.`
 })
+const keepDisabled = computed(() => running.value || (!isBatch.value && check.value?.canKeep === false))
+const replaceDisabled = computed(() => running.value || (!isBatch.value && check.value?.canReplace === false))
+const keepHint = computed(() =>
+  isBatch.value || !check.value ? 'Adds Name_kcc.cbz next to each book' : `Adds ${check.value.keepCopyName} next to it`,
+)
+const replaceHint = computed(() => (isBatch.value ? "Each book's file becomes the CBZ" : "The book's file becomes the CBZ"))
+const canSaveNew = computed(() => !savingPreset.value && newPresetName.value.trim().length > 0)
 
 watch(
-  () => target.value?.bookId,
-  (bookId) => {
-    if (bookId !== undefined) void convert.load(bookId)
+  () => target.value?.bookIds,
+  (bookIds) => {
+    newPresetName.value = ''
+    if (bookIds) void convert.load(bookIds)
   },
 )
 
@@ -64,6 +89,17 @@ function handleCustomOptions(value: KccOptionValues): void {
 
 function handleForce(value: boolean): void {
   force.value = value
+}
+
+function handleSaveNew(): void {
+  if (!canSaveNew.value) return
+  void convert.savePreset(newPresetName.value).then(() => {
+    if (!error.value) newPresetName.value = ''
+  })
+}
+
+function handleUpdatePreset(): void {
+  void convert.savePreset(null)
 }
 
 function handleStart(): void {
@@ -95,92 +131,135 @@ function handleStart(): void {
             <p v-if="status && !status.configured" class="settings-error-state">KCC is not set up (FORK_KCC_URL). See Settings > KCC.</p>
             <p v-else-if="status && !status.reachable" class="settings-error-state">Can't reach the KCC container: {{ status.error }}</p>
 
-            <div v-if="check" class="space-y-2">
-              <p class="settings-label">Result</p>
-              <div class="grid gap-2 sm:grid-cols-2">
-                <button
-                  type="button"
-                  class="rounded-md border p-3 text-start transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                  :class="mode === 'keep' ? 'border-primary bg-primary/10' : 'border-input hover:bg-muted'"
-                  :disabled="!check.canKeep || running"
-                  @click="handleKeep"
-                >
-                  <span class="block text-sm font-medium">Keep original</span>
-                  <span class="block text-xs text-muted-foreground">Adds {{ check.keepCopyName }} next to it</span>
-                </button>
-                <button
-                  type="button"
-                  class="rounded-md border p-3 text-start transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                  :class="mode === 'replace' ? 'border-primary bg-primary/10' : 'border-input hover:bg-muted'"
-                  :disabled="!check.canReplace || running"
-                  @click="handleReplace"
-                >
-                  <span class="block text-sm font-medium">Replace original</span>
-                  <span class="block text-xs text-muted-foreground">The book's file becomes the CBZ</span>
-                </button>
+            <template v-if="batchResult">
+              <div class="flex items-start gap-2 text-sm text-foreground">
+                <CheckCircle2 :size="16" class="mt-0.5 shrink-0 text-success" aria-hidden="true" />
+                <span>
+                  {{ batchResult.jobs.length }} {{ batchResult.jobs.length === 1 ? 'book is' : 'books are' }} queued. The card in the corner shows the
+                  progress, so you can close this window.
+                </span>
               </div>
-              <p v-if="!check.canKeep" class="settings-hint">Keep: {{ check.keepBlockedReason }}</p>
-              <p v-if="!check.canReplace" class="settings-hint">Replace: {{ check.replaceBlockedReason }}</p>
-            </div>
-
-            <div v-if="check && !modeBlockedReason" class="space-y-2">
-              <label for="kcc-convert-preset" class="settings-label block">Options</label>
-              <div class="flex flex-col gap-2 sm:flex-row">
-                <select id="kcc-convert-preset" v-model="presetValue" class="input-field flex-1" :disabled="running">
-                  <option value="">KCC defaults</option>
-                  <option v-for="preset in presets" :key="preset.id" :value="String(preset.id)">{{ preset.name }}</option>
-                </select>
-                <Button v-if="schema && customOptions === null" variant="outline" size="sm" :disabled="running" @click="handleCustomize">
-                  Adjust for this book
-                </Button>
+              <div v-if="batchResult.skipped.length" class="space-y-1">
+                <p class="settings-label">Skipped {{ batchResult.skipped.length }}</p>
+                <ul class="max-h-56 space-y-1 overflow-y-auto text-xs">
+                  <li v-for="skip in batchResult.skipped" :key="skip.bookId" class="text-muted-foreground">
+                    <span class="text-foreground">{{ skip.title ?? `Book ${skip.bookId}` }}</span>: {{ skip.reason }}
+                  </li>
+                </ul>
               </div>
-              <KccOptionsForm
-                v-if="schema && customOptions !== null"
-                :schema="schema"
-                :model-value="customOptions"
-                :disabled="running"
-                @update:model-value="handleCustomOptions"
-              />
-            </div>
+            </template>
 
-            <div
-              v-if="forceWarning && !running && job?.state !== 'done'"
-              class="flex items-start gap-3 rounded-md border border-warning/40 bg-warning/10 p-3"
-            >
-              <AlertTriangle :size="16" class="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
-              <div class="min-w-0 flex-1 space-y-2 text-sm">
-                <p>{{ forceWarning }}</p>
-                <label class="flex items-center gap-2">
-                  <ToggleSwitch :model-value="force" @update:model-value="handleForce" />
-                  Convert anyway
-                </label>
+            <template v-else-if="status?.reachable && (isBatch || check)">
+              <div class="space-y-2">
+                <p class="settings-label">Result</p>
+                <div class="grid gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    class="rounded-md border p-3 text-start transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                    :class="mode === 'keep' ? 'border-primary bg-primary/10' : 'border-input hover:bg-muted'"
+                    :disabled="keepDisabled"
+                    @click="handleKeep"
+                  >
+                    <span class="block text-sm font-medium">Keep original</span>
+                    <span class="block text-xs text-muted-foreground">{{ keepHint }}</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded-md border p-3 text-start transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                    :class="mode === 'replace' ? 'border-primary bg-primary/10' : 'border-input hover:bg-muted'"
+                    :disabled="replaceDisabled"
+                    @click="handleReplace"
+                  >
+                    <span class="block text-sm font-medium">Replace original</span>
+                    <span class="block text-xs text-muted-foreground">{{ replaceHint }}</span>
+                  </button>
+                </div>
+                <p v-if="check && !check.canKeep" class="settings-hint">Keep: {{ check.keepBlockedReason }}</p>
+                <p v-if="check && !check.canReplace" class="settings-hint">Replace: {{ check.replaceBlockedReason }}</p>
+                <p v-if="isBatch" class="settings-hint">Books that can't be converted this way are skipped and listed with the reason.</p>
               </div>
-            </div>
 
-            <div v-if="running" class="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 :size="16" class="animate-spin" aria-hidden="true" />
-              Converting... KCC can take a few minutes per volume. You can close this window: a notice in the corner shows when it's done.
-            </div>
-            <div v-else-if="resultText" class="flex items-start gap-2 text-sm text-foreground">
-              <CheckCircle2 :size="16" class="mt-0.5 shrink-0 text-success" aria-hidden="true" />
-              <span>{{ resultText }}</span>
-            </div>
-            <div v-else-if="job?.state === 'failed'" class="flex items-start gap-2 text-sm text-destructive">
-              <XCircle :size="16" class="mt-0.5 shrink-0" aria-hidden="true" />
-              <span>{{ job.error }}</span>
-            </div>
-            <p v-if="job?.ignoredOptions.length" class="settings-hint">
-              Left out (this KCC version doesn't have them): {{ job.ignoredOptions.join(', ') }}
-            </p>
+              <div v-if="!modeBlockedReason" class="space-y-2">
+                <label for="kcc-convert-preset" class="settings-label block">Options</label>
+                <div class="flex flex-col gap-2 sm:flex-row">
+                  <select id="kcc-convert-preset" v-model="presetValue" class="input-field flex-1" :disabled="running">
+                    <option value="">KCC defaults</option>
+                    <option v-for="preset in presets" :key="preset.id" :value="String(preset.id)">{{ preset.name }}</option>
+                  </select>
+                  <Button v-if="schema && customOptions === null" variant="outline" size="sm" :disabled="running" @click="handleCustomize">
+                    {{ selectedPreset ? 'Edit options' : 'Choose options' }}
+                  </Button>
+                </div>
+                <p v-if="!presets.length && customOptions === null" class="settings-hint">
+                  No presets yet. Choose options, then save them as a preset to use them again.
+                </p>
+
+                <template v-if="schema && customOptions !== null">
+                  <div class="flex flex-col gap-2 rounded-md border border-border bg-muted/30 p-3 sm:flex-row sm:items-center">
+                    <input
+                      v-model="newPresetName"
+                      type="text"
+                      maxlength="100"
+                      class="input-field flex-1"
+                      placeholder="New preset name, e.g. Manga - Libra Colour"
+                      aria-label="New preset name"
+                    />
+                    <Button size="sm" variant="outline" :disabled="!canSaveNew" @click="handleSaveNew">
+                      <Save :size="14" aria-hidden="true" />
+                      Save as new preset
+                    </Button>
+                    <Button v-if="selectedPreset" size="sm" variant="outline" :disabled="savingPreset" @click="handleUpdatePreset">
+                      Update "{{ selectedPreset.name }}"
+                    </Button>
+                  </div>
+                  <p class="settings-hint">Not saving is fine too: Convert uses these options just this once.</p>
+                  <KccOptionsForm :schema="schema" :model-value="customOptions" :disabled="running" @update:model-value="handleCustomOptions" />
+                </template>
+              </div>
+
+              <div v-if="isBatch" class="flex items-start gap-3 rounded-md border border-border p-3">
+                <ToggleSwitch :model-value="force" @update:model-value="handleForce" />
+                <span class="text-sm">Also convert books that already look converted, and overwrite existing _kcc copies</span>
+              </div>
+              <div
+                v-else-if="forceWarning && !running && job?.state !== 'done'"
+                class="flex items-start gap-3 rounded-md border border-warning/40 bg-warning/10 p-3"
+              >
+                <AlertTriangle :size="16" class="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
+                <div class="min-w-0 flex-1 space-y-2 text-sm">
+                  <p>{{ forceWarning }}</p>
+                  <label class="flex items-center gap-2">
+                    <ToggleSwitch :model-value="force" @update:model-value="handleForce" />
+                    Convert anyway
+                  </label>
+                </div>
+              </div>
+
+              <div v-if="running" class="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 :size="16" class="animate-spin" aria-hidden="true" />
+                Converting... You can close this window: the card in the corner shows when it's done.
+              </div>
+              <div v-else-if="resultText" class="flex items-start gap-2 text-sm text-foreground">
+                <CheckCircle2 :size="16" class="mt-0.5 shrink-0 text-success" aria-hidden="true" />
+                <span>{{ resultText }}</span>
+              </div>
+              <div v-else-if="job?.state === 'failed'" class="flex items-start gap-2 text-sm text-destructive">
+                <XCircle :size="16" class="mt-0.5 shrink-0" aria-hidden="true" />
+                <span>{{ job.error }}</span>
+              </div>
+              <p v-if="job?.ignoredOptions.length" class="settings-hint">
+                Left out (this KCC version doesn't have them): {{ job.ignoredOptions.join(', ') }}
+              </p>
+            </template>
             <p v-if="error" role="alert" class="settings-error-state">{{ error }}</p>
           </template>
         </div>
 
         <div class="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
           <Button variant="ghost" size="sm" @click="close">Close</Button>
-          <Button size="sm" :disabled="!canStart" @click="handleStart">
+          <Button v-if="!batchResult" size="sm" :disabled="!canStart" @click="handleStart">
             <Loader2 v-if="starting" :size="14" class="animate-spin" aria-hidden="true" />
-            Convert
+            {{ isBatch ? `Convert ${target?.bookIds.length} books` : 'Convert' }}
           </Button>
         </div>
       </DialogContent>

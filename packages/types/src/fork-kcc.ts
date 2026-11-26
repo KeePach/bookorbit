@@ -75,6 +75,21 @@ export interface KccConvertRequest {
   force?: boolean;
 }
 
+export interface KccBatchConvertRequest extends KccConvertRequest {
+  bookIds: number[];
+}
+
+export interface KccBatchSkip {
+  bookId: number;
+  title: string | null;
+  reason: string;
+}
+
+export interface KccBatchConvertResult {
+  jobs: KccConvertJob[];
+  skipped: KccBatchSkip[];
+}
+
 export type KccJobState = "queued" | "running" | "done" | "failed";
 
 export interface KccConvertJob {

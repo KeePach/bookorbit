@@ -6,6 +6,10 @@ import { useKccConvertDialog } from '../composables/useKccConvertDialog'
 import { resetKccJobTracker } from '../lib/kcc-job-tracker'
 
 const api = vi.hoisted(() => ({
+  convertMany: vi.fn(),
+  jobs: vi.fn(),
+  createPreset: vi.fn(),
+  updatePreset: vi.fn(),
   status: vi.fn(),
   options: vi.fn(),
   presets: vi.fn(),
@@ -48,10 +52,10 @@ const queued: KccConvertJob = {
   finishedAt: null,
 }
 
-async function openDialog() {
-  const wrapper = mount(KccConvertDialogHost, { attachTo: document.body })
+async function openDialog(bookIds = [4]) {
+  const wrapper = mount(KccConvertDialogHost, { attachTo: document.body, global: { stubs: { KccOptionsForm: true } } })
   mounted.push(wrapper)
-  useKccConvertDialog().open({ bookId: 4, title: 'Akira' })
+  useKccConvertDialog().open({ bookIds, title: bookIds.length === 1 ? 'Akira' : `${bookIds.length} books` })
   await flushPromises()
   await flushPromises()
   return wrapper
@@ -76,6 +80,7 @@ describe('KccConvertDialogHost', () => {
     api.check.mockResolvedValue(check())
     api.convert.mockResolvedValue(queued)
     api.job.mockResolvedValue(queued)
+    api.jobs.mockResolvedValue([queued])
   })
 
   afterEach(() => {
@@ -112,5 +117,36 @@ describe('KccConvertDialogHost', () => {
     await flushPromises()
 
     expect(api.convert).toHaveBeenCalledWith(4, { mode: 'keep', presetId: 2, force: true })
+  })
+
+  it('saves options chosen in the dialog as a new preset and selects it', async () => {
+    api.presets.mockResolvedValue([])
+    api.createPreset.mockResolvedValue({ id: 7, name: 'Manga LC', options: {}, createdAt: '', updatedAt: '' })
+    await openDialog()
+
+    button('Choose options').click()
+    await flushPromises()
+    const name = dialog().querySelector<HTMLInputElement>('input[aria-label="New preset name"]')!
+    name.value = 'Manga LC'
+    name.dispatchEvent(new Event('input'))
+    await flushPromises()
+    button('Save as new preset').click()
+    await flushPromises()
+
+    expect(api.createPreset).toHaveBeenCalledWith({ name: 'Manga LC', options: {} })
+    expect(dialog().querySelector<HTMLSelectElement>('#kcc-convert-preset')!.value).toBe('7')
+  })
+
+  it('converts a selection as one batch and lists what was skipped', async () => {
+    api.convertMany.mockResolvedValue({ jobs: [queued], skipped: [{ bookId: 5, title: 'A novel', reason: 'EPUB is not a comic' }] })
+    await openDialog([4, 5])
+
+    expect(api.check).not.toHaveBeenCalled()
+    button('Convert 2 books').click()
+    await flushPromises()
+
+    expect(api.convertMany).toHaveBeenCalledWith({ mode: 'keep', presetId: 2, bookIds: [4, 5] })
+    expect(dialog().textContent).toContain('1 book is queued')
+    expect(dialog().textContent).toContain('A novel: EPUB is not a comic')
   })
 })

@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsIn, IsInt, IsObject, IsOptional, IsString, Length, Min } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsObject, IsOptional, IsString, Length, Min } from 'class-validator';
 
 import type { KccConvertMode, KccOptionValues } from '@bookorbit/types';
 
@@ -29,4 +29,13 @@ export class KccConvertDto {
   @IsOptional()
   @IsBoolean()
   force?: boolean;
+}
+
+export class KccBatchConvertDto extends KccConvertDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(500)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  bookIds!: number[];
 }

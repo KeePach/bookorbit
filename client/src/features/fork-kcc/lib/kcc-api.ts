@@ -1,4 +1,14 @@
-import type { KccConvertCheck, KccConvertJob, KccConvertRequest, KccOptionSchema, KccPreset, KccPresetInput, KccStatus } from '@bookorbit/types'
+import type {
+  KccBatchConvertRequest,
+  KccBatchConvertResult,
+  KccConvertCheck,
+  KccConvertJob,
+  KccConvertRequest,
+  KccOptionSchema,
+  KccPreset,
+  KccPresetInput,
+  KccStatus,
+} from '@bookorbit/types'
 import { ApiError, apiJson, apiSend, jsonBody } from '@/lib/api-json'
 
 const BASE = '/api/v1/fork/kcc'
@@ -15,7 +25,8 @@ export const kccApi = {
   latestJob: (bookId: number) => apiJson<{ job: KccConvertJob | null }>(`${BASE}/books/${bookId}/job`, undefined, FALLBACK),
   convert: (bookId: number, request: KccConvertRequest) =>
     apiJson<KccConvertJob>(`${BASE}/books/${bookId}/convert`, jsonBody('POST', request), FALLBACK),
-  activeJobs: () => apiJson<KccConvertJob[]>(`${BASE}/jobs`, undefined, FALLBACK),
+  convertMany: (request: KccBatchConvertRequest) => apiJson<KccBatchConvertResult>(`${BASE}/convert`, jsonBody('POST', request), FALLBACK),
+  jobs: () => apiJson<KccConvertJob[]>(`${BASE}/jobs`, undefined, FALLBACK),
   job: (id: string) => apiJson<KccConvertJob>(`${BASE}/jobs/${id}`, undefined, FALLBACK),
 }
 

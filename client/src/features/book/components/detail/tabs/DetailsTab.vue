@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import KccConvertDialogHost from '@/features/fork-kcc/components/KccConvertDialogHost.vue'
 import KccConvertMenuItem from '@/features/fork-kcc/components/KccConvertMenuItem.vue'
 import { formatDate as formatLocaleDate } from '@/i18n/formatters'
 import { formatBytes as formatFileSize } from '@/lib/formatting'
@@ -2564,7 +2563,6 @@ watch(
     @done="void loadSupplemental()"
   />
 
-  <KccConvertDialogHost />
   <SendBookDialog
     v-model:open="showSendDialog"
     :selection-payload="{ bookIds: [book.id] }"

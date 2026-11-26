@@ -1,80 +1,115 @@
-import { reactive } from 'vue'
-import { toast } from 'vue-sonner'
+import { computed, reactive } from 'vue'
 import type { KccConvertJob } from '@bookorbit/types'
 import { kccApi } from './kcc-api'
 
 const POLL_MS = 3000
-const DONE_TOAST_MS = 15000
+/** A finished session without failures leaves the corner by itself after this long. */
+const AUTO_HIDE_MS = 20000
 
-/** Latest known state of every conversion this tab follows, by job id. The dialog reads it too. */
-export const kccJobs = reactive(new Map<string, KccConvertJob>())
-
-const followed = new Map<string, { timer: ReturnType<typeof setTimeout> | null }>()
-
-function isRunning(job: KccConvertJob): boolean {
-  return job.state === 'queued' || job.state === 'running'
+interface KccProgressState {
+  /** Latest known state of every conversion this tab has seen, by id. The dialog reads it too. */
+  jobs: Map<string, KccConvertJob>
+  /** The conversions the corner card counts, in the order they were started. */
+  session: string[]
+  dismissed: boolean
 }
 
-function showProgress(job: KccConvertJob): void {
-  toast.loading(`Converting "${job.title}" with KCC`, {
-    id: job.id,
-    description: job.state === 'queued' ? 'Waiting for the conversion before it' : 'This can take a few minutes. You can keep using BookOrbit.',
-    duration: Infinity,
-  })
+export const kccProgress = reactive<KccProgressState>({ jobs: new Map(), session: [], dismissed: false })
+
+let pollTimer: ReturnType<typeof setTimeout> | null = null
+let hideTimer: ReturnType<typeof setTimeout> | null = null
+
+export function isKccJobRunning(job: KccConvertJob | undefined): boolean {
+  return job?.state === 'queued' || job?.state === 'running'
 }
 
-function showResult(job: KccConvertJob): void {
-  if (job.state === 'done') {
-    toast.success(`"${job.title}" converted with KCC`, {
-      id: job.id,
-      description:
-        job.mode === 'replace'
-          ? `${job.outputName} replaced the original. Drag it to your Kobo.`
-          : `${job.outputName} is next to the original. Drag it to your Kobo.`,
-      duration: DONE_TOAST_MS,
-    })
-  } else {
-    toast.error(`KCC couldn't convert "${job.title}"`, { id: job.id, description: job.error ?? undefined, duration: Infinity })
+const sessionJobs = computed(() => kccProgress.session.map((id) => kccProgress.jobs.get(id)).filter((job): job is KccConvertJob => !!job))
+
+export const kccSession = computed(() => {
+  const jobs = sessionJobs.value
+  const done = jobs.filter((job) => job.state === 'done').length
+  const failed = jobs.filter((job) => job.state === 'failed').length
+  const remaining = jobs.length - done - failed
+  return {
+    jobs,
+    total: jobs.length,
+    done,
+    failed,
+    remaining,
+    current: jobs.find((job) => job.state === 'running') ?? null,
+    visible: jobs.length > 0 && !kccProgress.dismissed,
   }
+})
+
+function clearTimer(timer: ReturnType<typeof setTimeout> | null): null {
+  if (timer) clearTimeout(timer)
+  return null
 }
 
-async function poll(id: string): Promise<void> {
-  const entry = followed.get(id)
-  if (!entry) return
-  entry.timer = null
+function schedulePoll(): void {
+  pollTimer = clearTimer(pollTimer)
+  pollTimer = setTimeout(() => void poll(), POLL_MS)
+}
+
+function scheduleAutoHide(): void {
+  hideTimer = clearTimer(hideTimer)
+  if (kccSession.value.failed > 0) return
+  hideTimer = setTimeout(() => {
+    if (kccSession.value.remaining === 0) dismissKccProgress()
+  }, AUTO_HIDE_MS)
+}
+
+async function poll(): Promise<void> {
+  pollTimer = null
   try {
-    const job = await kccApi.job(id)
-    kccJobs.set(id, job)
-    if (isRunning(job)) {
-      showProgress(job)
-      entry.timer = setTimeout(() => void poll(id), POLL_MS)
-    } else {
-      followed.delete(id)
-      showResult(job)
+    const listed = await kccApi.jobs()
+    const known = new Set(listed.map((job) => job.id))
+    for (const job of listed) kccProgress.jobs.set(job.id, job)
+    // BookOrbit restarted: it no longer knows these, so they will never finish.
+    for (const id of kccProgress.session) {
+      const job = kccProgress.jobs.get(id)
+      if (job && !known.has(id) && isKccJobRunning(job)) {
+        kccProgress.jobs.set(id, { ...job, state: 'failed', error: 'BookOrbit restarted before this finished. Convert it again.' })
+      }
     }
   } catch {
-    // A restart of BookOrbit forgets its conversions; stop rather than spin on a 404.
-    followed.delete(id)
-    toast.dismiss(id)
+    // Try again on the next round; the card keeps its last state meanwhile.
   }
+  if (kccSession.value.remaining > 0) schedulePoll()
+  else scheduleAutoHide()
 }
 
-/** Shows a toast for the conversion until it finishes, wherever the user goes in the app. */
-export function trackKccJob(job: KccConvertJob): void {
-  kccJobs.set(job.id, job)
-  if (!isRunning(job)) return
-  if (followed.has(job.id)) return
-  followed.set(job.id, { timer: null })
-  showProgress(job)
-  followed.get(job.id)!.timer = setTimeout(() => void poll(job.id), POLL_MS)
+/** Follows these conversions in the corner card until they finish, wherever the user goes in the app. */
+export function trackKccJobs(jobs: KccConvertJob[]): void {
+  if (jobs.length === 0) return
+  if (kccSession.value.remaining === 0) kccProgress.session = []
+  hideTimer = clearTimer(hideTimer)
+  for (const job of jobs) {
+    kccProgress.jobs.set(job.id, job)
+    if (!kccProgress.session.includes(job.id)) kccProgress.session.push(job.id)
+  }
+  kccProgress.dismissed = false
+  if (kccSession.value.remaining > 0) schedulePoll()
+}
+
+/** After a reload, picks up the conversions still running on the server. */
+export async function resumeKccJobs(): Promise<void> {
+  const listed = await kccApi.jobs()
+  trackKccJobs(listed.filter((job) => isKccJobRunning(job)))
+}
+
+/** Hides the card. Running conversions go on, and starting another one shows it again. */
+export function dismissKccProgress(): void {
+  kccProgress.dismissed = true
+  hideTimer = clearTimer(hideTimer)
+  if (kccSession.value.remaining === 0) kccProgress.session = []
 }
 
 /** For tests. */
 export function resetKccJobTracker(): void {
-  for (const [id, entry] of followed) {
-    if (entry.timer) clearTimeout(entry.timer)
-    toast.dismiss(id)
-  }
-  followed.clear()
-  kccJobs.clear()
+  pollTimer = clearTimer(pollTimer)
+  hideTimer = clearTimer(hideTimer)
+  kccProgress.jobs.clear()
+  kccProgress.session = []
+  kccProgress.dismissed = false
 }
