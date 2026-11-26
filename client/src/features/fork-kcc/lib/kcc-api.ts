@@ -15,6 +15,7 @@ export const kccApi = {
   latestJob: (bookId: number) => apiJson<{ job: KccConvertJob | null }>(`${BASE}/books/${bookId}/job`, undefined, FALLBACK),
   convert: (bookId: number, request: KccConvertRequest) =>
     apiJson<KccConvertJob>(`${BASE}/books/${bookId}/convert`, jsonBody('POST', request), FALLBACK),
+  activeJobs: () => apiJson<KccConvertJob[]>(`${BASE}/jobs`, undefined, FALLBACK),
   job: (id: string) => apiJson<KccConvertJob>(`${BASE}/jobs/${id}`, undefined, FALLBACK),
 }
 

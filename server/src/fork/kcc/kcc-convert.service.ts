@@ -118,6 +118,7 @@ export class KccConvertService {
       id: randomUUID(),
       userId: user.id,
       bookId,
+      title: file.title ?? check.fileName,
       mode: request.mode,
       state: 'queued',
       error: null,
@@ -136,6 +137,14 @@ export class KccConvertService {
     const job = this.jobs.get(id);
     if (!job || job.userId !== user.id) throw new NotFoundException('Conversion not found');
     return this.toDto(job);
+  }
+
+  /** The user's conversions that haven't finished, so a reloaded page can show them again. */
+  activeJobs(user: RequestUser): KccConvertJob[] {
+    return [...this.jobs.values()]
+      .filter((job) => job.userId === user.id && (job.state === 'queued' || job.state === 'running'))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map((job) => this.toDto(job));
   }
 
   latestJob(user: RequestUser, bookId: number): KccConvertJob | null {
@@ -271,6 +280,7 @@ export class KccConvertService {
     return {
       id: job.id,
       bookId: job.bookId,
+      title: job.title,
       mode: job.mode,
       state: job.state,
       error: job.error,

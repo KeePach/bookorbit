@@ -80,6 +80,8 @@ export type KccJobState = "queued" | "running" | "done" | "failed";
 export interface KccConvertJob {
   id: string;
   bookId: number;
+  /** The book's title when the conversion started. */
+  title: string;
   mode: KccConvertMode;
   state: KccJobState;
   error: string | null;

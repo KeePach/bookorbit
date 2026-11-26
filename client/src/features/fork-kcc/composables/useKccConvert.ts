@@ -1,8 +1,8 @@
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { KccConvertCheck, KccConvertJob, KccConvertMode, KccOptionSchema, KccOptionValues, KccPreset, KccStatus } from '@bookorbit/types'
 import { kccApi, kccErrorCode, kccErrorText } from '../lib/kcc-api'
+import { kccJobs, trackKccJob } from '../lib/kcc-job-tracker'
 
-const POLL_MS = 2000
 const REMEMBER_KEY = 'bookorbit.fork.kcc.convert'
 
 interface Remembered {
@@ -34,7 +34,8 @@ export function useKccConvert() {
   const check = ref<KccConvertCheck | null>(null)
   const presets = ref<KccPreset[]>([])
   const schema = ref<KccOptionSchema | null>(null)
-  const job = ref<KccConvertJob | null>(null)
+  const jobId = ref<string | null>(null)
+  const job = computed<KccConvertJob | null>(() => (jobId.value ? (kccJobs.get(jobId.value) ?? null) : null))
   const loading = ref(false)
   const starting = ref(false)
   const error = ref<string | null>(null)
@@ -43,7 +44,6 @@ export function useKccConvert() {
   const presetId = ref<number | null>(null)
   const customOptions = ref<KccOptionValues | null>(null)
   const force = ref(false)
-  let pollTimer: ReturnType<typeof setTimeout> | null = null
 
   const running = computed(() => job.value?.state === 'queued' || job.value?.state === 'running')
   const needsForce = computed(() => {
@@ -66,34 +66,25 @@ export function useKccConvert() {
   )
   const selectedPreset = computed(() => presets.value.find((preset) => preset.id === presetId.value) ?? null)
 
-  function stopPolling(): void {
-    if (pollTimer !== null) clearTimeout(pollTimer)
-    pollTimer = null
-  }
-
-  function schedulePoll(): void {
-    stopPolling()
-    pollTimer = setTimeout(() => void poll(), POLL_MS)
-  }
-
-  async function poll(): Promise<void> {
-    pollTimer = null
-    if (!job.value) return
-    try {
-      job.value = await kccApi.job(job.value.id)
-      if (running.value) schedulePoll()
-      else if (bookId.value !== null) check.value = await kccApi.check(bookId.value)
-    } catch (reason) {
-      error.value = kccErrorText(reason)
-    }
-  }
+  // The tracker follows the job (and its toast); when it finishes, the file on disk changed.
+  watch(
+    () => job.value?.state,
+    (state, previous) => {
+      const finished = state === 'done' || state === 'failed'
+      const wasRunning = previous === 'queued' || previous === 'running'
+      if (finished && wasRunning && bookId.value !== null) {
+        void kccApi.check(bookId.value).then((value) => {
+          check.value = value
+        })
+      }
+    },
+  )
 
   async function load(id: number): Promise<void> {
-    stopPolling()
     bookId.value = id
     loading.value = true
     error.value = null
-    job.value = null
+    jobId.value = null
     force.value = false
     customOptions.value = null
     try {
@@ -101,8 +92,10 @@ export function useKccConvert() {
       const [checked, presetList, latest] = await Promise.all([kccApi.check(id), kccApi.presets(), kccApi.latestJob(id)])
       check.value = checked
       presets.value = presetList
-      job.value = latest.job
-      if (running.value) schedulePoll()
+      if (latest.job) {
+        trackKccJob(latest.job)
+        jobId.value = latest.job.id
+      }
       schema.value = status.value.reachable ? await kccApi.options() : null
 
       const remembered = readRemembered()
@@ -127,13 +120,14 @@ export function useKccConvert() {
     starting.value = true
     error.value = null
     try {
-      job.value = await kccApi.convert(bookId.value, {
+      const started = await kccApi.convert(bookId.value, {
         mode: mode.value,
         ...(customOptions.value !== null ? { options: customOptions.value } : presetId.value !== null ? { presetId: presetId.value } : {}),
         ...(force.value ? { force: true } : {}),
       })
+      trackKccJob(started)
+      jobId.value = started.id
       writeRemembered({ presetId: presetId.value, mode: mode.value })
-      schedulePoll()
     } catch (reason) {
       error.value = kccErrorText(reason)
       if (kccErrorCode(reason) === 'KCC_ALREADY_CONVERTED' || kccErrorCode(reason) === 'KCC_COPY_EXISTS') {
@@ -143,8 +137,6 @@ export function useKccConvert() {
       starting.value = false
     }
   }
-
-  onBeforeUnmount(stopPolling)
 
   return {
     status,
@@ -166,6 +158,5 @@ export function useKccConvert() {
     load,
     customize,
     start,
-    stopPolling,
   }
 }

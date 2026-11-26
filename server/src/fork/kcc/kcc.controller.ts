@@ -66,6 +66,11 @@ export class KccController {
     return this.converter.start(user, bookId, dto);
   }
 
+  @Get('jobs')
+  activeJobs(@CurrentUser() user: RequestUser): KccConvertJob[] {
+    return this.converter.activeJobs(user);
+  }
+
   @Get('jobs/:id')
   job(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string): KccConvertJob {
     return this.converter.getJob(user, id);

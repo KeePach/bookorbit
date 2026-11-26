@@ -120,7 +120,8 @@ describe('KccConvertService', () => {
     expect(placedContent?.comicInfo).toContain('<PageCount>3</PageCount>');
     expect(placedContent?.comicInfo).toContain('<Summary>Space opera</Summary>');
     expect(placement.replace).toHaveBeenCalledWith(file, expect.any(String), expect.stringMatching(/^[0-9a-f]{32}$/), job.id);
-    expect(service.getJob(user, job.id)).toMatchObject({ state: 'done', outputName: 'Saga #01.cbz', error: null });
+    expect(service.getJob(user, job.id)).toMatchObject({ title: 'Saga 1', state: 'done', outputName: 'Saga #01.cbz', error: null });
+    expect(service.activeJobs(user)).toEqual([]);
     expect(await readdir(workDir)).toEqual([]);
   });
 
@@ -161,6 +162,8 @@ describe('KccConvertService', () => {
   it('does not show another user their conversions', async () => {
     const job = await service.start(user, 9, { mode: 'keep' });
     expect(() => service.getJob({ id: 6 } as RequestUser, job.id)).toThrow('Conversion not found');
+    expect(service.activeJobs({ id: 6 } as RequestUser)).toEqual([]);
+    expect(service.activeJobs(user).map((active) => active.id)).toEqual([job.id]);
     await finish();
   });
 });

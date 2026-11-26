@@ -3,6 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import type { KccConvertCheck, KccConvertJob } from '@bookorbit/types'
 import KccConvertDialogHost from './KccConvertDialogHost.vue'
 import { useKccConvertDialog } from '../composables/useKccConvertDialog'
+import { resetKccJobTracker } from '../lib/kcc-job-tracker'
 
 const api = vi.hoisted(() => ({
   status: vi.fn(),
@@ -37,6 +38,7 @@ function check(overrides: Partial<KccConvertCheck> = {}): KccConvertCheck {
 const queued: KccConvertJob = {
   id: '6a1c9f8e-0000-4000-8000-000000000000',
   bookId: 4,
+  title: 'Akira',
   mode: 'keep',
   state: 'queued',
   error: null,
@@ -77,6 +79,7 @@ describe('KccConvertDialogHost', () => {
   })
 
   afterEach(() => {
+    resetKccJobTracker()
     useKccConvertDialog().close()
     mounted.splice(0).forEach((wrapper) => wrapper.unmount())
   })

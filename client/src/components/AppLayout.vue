@@ -6,6 +6,7 @@ import AppSidebar from '@/components/AppSidebar.vue'
 import MobileShellBar from '@/components/MobileShellBar.vue'
 import CommandPalette from '@/features/command-palette/components/CommandPalette.vue'
 import BookMetadataFetchWidget from '@/features/book-metadata-fetch/components/BookMetadataFetchWidget.vue'
+import KccJobToasts from '@/features/fork-kcc/components/KccJobToasts.vue'
 import { useAppStyleScope } from '@/composables/useAppStyleScope'
 import { useShellServices } from '@/composables/useShellServices'
 import { useThemeStore } from '@/stores/theme'
@@ -75,6 +76,7 @@ const viewKey = computed(() => {
     </SidebarInset>
     <BookMetadataFetchWidget :hide-book-card="route.name === 'settings-metadata-auto-fetch'" />
     <CommandPalette />
+    <KccJobToasts />
   </SidebarProvider>
 </template>
 

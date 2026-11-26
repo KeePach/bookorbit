@@ -39,7 +39,6 @@ watch(
   () => target.value?.bookId,
   (bookId) => {
     if (bookId !== undefined) void convert.load(bookId)
-    else convert.stopPolling()
   },
 )
 
@@ -160,7 +159,7 @@ function handleStart(): void {
 
             <div v-if="running" class="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 :size="16" class="animate-spin" aria-hidden="true" />
-              Converting... KCC can take a few minutes per volume. You can close this window.
+              Converting... KCC can take a few minutes per volume. You can close this window: a notice in the corner shows when it's done.
             </div>
             <div v-else-if="resultText" class="flex items-start gap-2 text-sm text-foreground">
               <CheckCircle2 :size="16" class="mt-0.5 shrink-0 text-success" aria-hidden="true" />
