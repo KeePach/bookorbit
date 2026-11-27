@@ -75,6 +75,16 @@ export interface KccConvertRequest {
   options?: KccOptionValues;
   /** Convert even though the file looks converted, or the _kcc copy already exists. */
   force?: boolean;
+  /** Pages to leave out of the result, 0-based in the comic reader's order. One book only. */
+  removePages?: number[];
+}
+
+/** The Convert dialog's Pages tab: only formats the comic reader lists (CBZ, CBR, CB7). */
+export interface KccPagesInfo {
+  supported: boolean;
+  /** Why pages can't be chosen, e.g. for a PDF. */
+  reason: string | null;
+  pageCount: number;
 }
 
 export interface KccBatchConvertRequest extends KccConvertRequest {
@@ -109,6 +119,8 @@ export interface KccConvertJob {
   warning: string | null;
   /** Preset options KCC no longer knows; they were left out. */
   ignoredOptions: string[];
+  /** How many pages were left out of the result. */
+  removedPages: number;
   createdAt: string;
   finishedAt: string | null;
   /** Last change of state; `GET jobs?since=` returns jobs changed after a time. */

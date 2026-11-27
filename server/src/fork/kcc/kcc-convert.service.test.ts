@@ -28,6 +28,7 @@ describe('KccConvertService', () => {
   const bookService = { verifyBookAccess: vi.fn(), resolveSelectionToIds: vi.fn((dto: { bookIds: number[] }) => Promise.resolve(dto.bookIds)) };
   const fileWriteRepo = { loadPayload: vi.fn() };
   const fileRename = { performRename: vi.fn() };
+  const pages = { writeWithoutPages: vi.fn(), info: vi.fn(), thumbnail: vi.fn() };
   let service: KccConvertService;
   let placedContent: { comicInfo: string | null } | null;
 
@@ -91,6 +92,7 @@ describe('KccConvertService', () => {
       bookService as never,
       fileWriteRepo as never,
       fileRename as never,
+      pages as never,
       {
         url: 'http://kcc:8090',
         workDir,
@@ -161,6 +163,39 @@ describe('KccConvertService', () => {
     await finish();
     expect(service.getJob(user, kept.id)).toMatchObject({ state: 'done', warning: null });
     expect(fileRename.performRename).not.toHaveBeenCalled();
+  });
+
+  it('builds the input without the removed pages, for one book only', async () => {
+    pages.writeWithoutPages.mockImplementation(async (_user: RequestUser, _file: KccBookFile, _pages: number[], _scratch: string, out: string) => {
+      await makeCbz(out, ['0001.jpg']);
+      return 1;
+    });
+    client.getJob.mockImplementation(async () => {
+      const jobDir = (await readdir(workDir))[0];
+      const [out] = await readdir(join(workDir, jobDir, 'out'));
+      return { state: 'done', outputs: [`${jobDir}/out/${out}`], log: '', exitCode: 0 };
+    });
+
+    const job = await service.start(user, 9, { mode: 'keep', removePages: [3, 0, 3] });
+    expect(job.removedPages).toBe(2);
+    await finish();
+
+    expect(pages.writeWithoutPages).toHaveBeenCalledWith(
+      user,
+      file,
+      [0, 3],
+      expect.stringMatching(/pages$/),
+      expect.stringMatching(/in\/book\.cbz$/),
+    );
+    expect(client.startJob).toHaveBeenCalledWith(expect.stringMatching(/in\/book\.cbz$/), expect.any(String), expect.any(Array));
+
+    await expect(service.startMany(user, { bookIds: [9] }, { mode: 'keep', removePages: [1] })).rejects.toMatchObject({
+      response: { errorCode: 'KCC_BAD_PAGES' },
+    });
+    file = { ...file, absolutePath: join(library, 'Scan.pdf'), format: 'pdf' };
+    await expect(service.start(user, 9, { mode: 'keep', removePages: [1] })).rejects.toMatchObject({
+      response: { message: "Choosing pages isn't supported for PDF files" },
+    });
   });
 
   it('reports a KCC failure on the job', async () => {

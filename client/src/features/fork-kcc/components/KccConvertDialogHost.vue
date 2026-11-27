@@ -6,6 +6,7 @@ import type { KccOptionValues } from '@bookorbit/types'
 import { Button } from '@/components/ui/button'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import KccOptionsForm from './KccOptionsForm.vue'
+import KccPagesPanel from './KccPagesPanel.vue'
 import { useKccConvert } from '../composables/useKccConvert'
 import { useKccConvertDialog } from '../composables/useKccConvertDialog'
 
@@ -31,9 +32,13 @@ const {
   selectedPreset,
   modeBlockedReason,
   canStart,
+  removePages,
 } = convert
 
 const newPresetName = ref('')
+const tab = ref<'options' | 'pages'>('options')
+/** The Pages tab loads its thumbnails only once it is first opened. */
+const pagesOpened = ref(false)
 const open = computed(() => target.value !== null)
 const presetValue = computed({
   get: () => (presetId.value === null ? '' : String(presetId.value)),
@@ -47,9 +52,10 @@ const forceWarning = computed(() => {
 })
 const resultText = computed(() => {
   if (job.value?.state !== 'done') return null
-  return job.value.mode === 'replace'
-    ? `${job.value.outputName} replaced the original and follows the library's naming pattern. Drag it to your Kobo.`
-    : `${job.value.outputName} is next to the original. Drag it to your Kobo.`
+  const removed = job.value.removedPages
+  const left = removed ? ` (${removed} ${removed === 1 ? 'page' : 'pages'} left out)` : ''
+  const where = job.value.mode === 'replace' ? "replaced the original and follows the library's naming pattern" : 'is next to the original'
+  return `${job.value.outputName} ${where}${left}. Drag it to your Kobo.`
 })
 const keepDisabled = computed(() => running.value || (!isBatch.value && check.value?.canKeep === false))
 const replaceDisabled = computed(() => running.value || (!isBatch.value && check.value?.canReplace === false))
@@ -65,11 +71,22 @@ const canSaveNew = computed(() => !savingPreset.value && newPresetName.value.tri
 
 watch(target, (next) => {
   newPresetName.value = ''
+  tab.value = 'options'
+  pagesOpened.value = false
   if (next) void convert.load(next)
 })
 
 function handleOpenChange(value: boolean): void {
   if (!value) close()
+}
+
+function handleOptionsTab(): void {
+  tab.value = 'options'
+}
+
+function handlePagesTab(): void {
+  tab.value = 'pages'
+  pagesOpened.value = true
 }
 
 function handleKeep(): void {
@@ -114,7 +131,8 @@ function handleStart(): void {
       <DialogOverlay class="fixed inset-0 z-[60] bg-scrim" />
       <DialogContent
         aria-modal="true"
-        class="fixed left-1/2 top-1/2 z-[60] flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col rounded-lg border border-border bg-card shadow-xl focus-visible:outline-none"
+        :class="tab === 'pages' && !isBatch ? 'max-w-4xl' : 'max-w-2xl'"
+        class="fixed left-1/2 top-1/2 z-[60] flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-lg border border-border bg-card shadow-xl focus-visible:outline-none"
       >
         <div class="border-b border-border px-5 pb-4 pt-5">
           <DialogTitle class="flex items-center gap-2 text-lg font-semibold text-foreground">
@@ -151,91 +169,129 @@ function handleStart(): void {
             </template>
 
             <template v-else-if="status?.reachable && (isBatch || check)">
-              <div class="space-y-2">
-                <p class="settings-label">Result</p>
-                <div class="grid gap-2 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    class="rounded-md border p-3 text-start transition-colors disabled:cursor-not-allowed disabled:border-dashed disabled:bg-muted/30"
-                    :class="mode === 'keep' ? 'border-primary bg-primary/10' : 'border-input hover:bg-muted'"
-                    :disabled="keepDisabled"
-                    @click="handleKeep"
-                  >
-                    <span class="block text-sm font-medium">Keep original</span>
-                    <span v-if="check && !check.canKeep" class="block text-xs text-warning">{{ check.keepBlockedReason }}</span>
-                    <span v-else class="block text-xs text-muted-foreground">{{ keepHint }}</span>
-                  </button>
-                  <button
-                    type="button"
-                    class="rounded-md border p-3 text-start transition-colors disabled:cursor-not-allowed disabled:border-dashed disabled:bg-muted/30"
-                    :class="mode === 'replace' ? 'border-primary bg-primary/10' : 'border-input hover:bg-muted'"
-                    :disabled="replaceDisabled"
-                    @click="handleReplace"
-                  >
-                    <span class="block text-sm font-medium">Replace original</span>
-                    <span v-if="check && !check.canReplace" class="block text-xs text-warning">{{ check.replaceBlockedReason }}</span>
-                    <span v-else class="block text-xs text-muted-foreground">{{ replaceHint }}</span>
-                  </button>
-                </div>
-                <p v-if="isBatch" class="settings-hint">Books that can't be converted this way are skipped and listed with the reason.</p>
+              <div v-if="!isBatch" class="flex gap-1 border-b border-border" role="tablist">
+                <button
+                  type="button"
+                  role="tab"
+                  class="-mb-px border-b-2 px-3 py-1.5 text-sm transition-colors"
+                  :class="tab === 'options' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'"
+                  :aria-selected="tab === 'options'"
+                  @click="handleOptionsTab"
+                >
+                  Options
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  class="-mb-px border-b-2 px-3 py-1.5 text-sm transition-colors"
+                  :class="tab === 'pages' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'"
+                  :aria-selected="tab === 'pages'"
+                  @click="handlePagesTab"
+                >
+                  Pages<span v-if="removePages.length" class="text-muted-foreground"> ({{ removePages.length }} removed)</span>
+                </button>
               </div>
-
-              <div v-if="!modeBlockedReason" class="space-y-2">
-                <label for="kcc-convert-preset" class="settings-label block">Options</label>
-                <div class="flex flex-col gap-2 sm:flex-row">
-                  <select id="kcc-convert-preset" v-model="presetValue" class="input-field flex-1" :disabled="running">
-                    <option value="">KCC defaults</option>
-                    <option v-for="preset in presets" :key="preset.id" :value="String(preset.id)">{{ preset.name }}</option>
-                  </select>
-                  <Button v-if="schema && customOptions === null" variant="outline" size="sm" :disabled="running" @click="handleCustomize">
-                    {{ selectedPreset ? 'Edit options' : 'Choose options' }}
-                  </Button>
+              <KccPagesPanel
+                v-if="!isBatch && pagesOpened && target"
+                v-show="tab === 'pages'"
+                v-model:removed="removePages"
+                :book-id="target.selection.bookIds?.[0] ?? 0"
+                :disabled="running"
+              />
+              <div v-show="isBatch || tab === 'options'" class="space-y-5">
+                <div class="space-y-2">
+                  <p class="settings-label">Result</p>
+                  <div class="grid gap-2 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      class="rounded-md border p-3 text-start transition-colors disabled:cursor-not-allowed disabled:border-dashed disabled:bg-muted/30"
+                      :class="mode === 'keep' ? 'border-primary bg-primary/10' : 'border-input hover:bg-muted'"
+                      :disabled="keepDisabled"
+                      @click="handleKeep"
+                    >
+                      <span class="block text-sm font-medium">Keep original</span>
+                      <span v-if="check && !check.canKeep" class="block text-xs text-warning">{{ check.keepBlockedReason }}</span>
+                      <span v-else class="block text-xs text-muted-foreground">{{ keepHint }}</span>
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded-md border p-3 text-start transition-colors disabled:cursor-not-allowed disabled:border-dashed disabled:bg-muted/30"
+                      :class="mode === 'replace' ? 'border-primary bg-primary/10' : 'border-input hover:bg-muted'"
+                      :disabled="replaceDisabled"
+                      @click="handleReplace"
+                    >
+                      <span class="block text-sm font-medium">Replace original</span>
+                      <span v-if="check && !check.canReplace" class="block text-xs text-warning">{{ check.replaceBlockedReason }}</span>
+                      <span v-else class="block text-xs text-muted-foreground">{{ replaceHint }}</span>
+                    </button>
+                  </div>
+                  <p v-if="isBatch" class="settings-hint">Books that can't be converted this way are skipped and listed with the reason.</p>
                 </div>
-                <p v-if="!presets.length && customOptions === null" class="settings-hint">
-                  No presets yet. Choose options, then save them as a preset to use them again.
-                </p>
 
-                <template v-if="schema && customOptions !== null">
-                  <div class="flex flex-col gap-2 rounded-md border border-border bg-muted/30 p-3 sm:flex-row sm:items-center">
-                    <input
-                      v-model="newPresetName"
-                      type="text"
-                      maxlength="100"
-                      class="input-field flex-1"
-                      placeholder="New preset name, e.g. Manga - Libra Colour"
-                      aria-label="New preset name"
-                    />
-                    <Button size="sm" variant="outline" :disabled="!canSaveNew" @click="handleSaveNew">
-                      <Save :size="14" aria-hidden="true" />
-                      Save as new preset
-                    </Button>
-                    <Button v-if="selectedPreset" size="sm" variant="outline" :disabled="savingPreset" @click="handleUpdatePreset">
-                      Update "{{ selectedPreset.name }}"
+                <div v-if="!modeBlockedReason" class="space-y-2">
+                  <label for="kcc-convert-preset" class="settings-label block">Options</label>
+                  <div class="flex flex-col gap-2 sm:flex-row">
+                    <select id="kcc-convert-preset" v-model="presetValue" class="input-field flex-1" :disabled="running">
+                      <option value="">KCC defaults</option>
+                      <option v-for="preset in presets" :key="preset.id" :value="String(preset.id)">{{ preset.name }}</option>
+                    </select>
+                    <Button v-if="schema && customOptions === null" variant="outline" size="sm" :disabled="running" @click="handleCustomize">
+                      {{ selectedPreset ? 'Edit options' : 'Choose options' }}
                     </Button>
                   </div>
-                  <p class="settings-hint">Not saving is fine too: Convert uses these options just this once.</p>
-                  <KccOptionsForm :schema="schema" :model-value="customOptions" :disabled="running" @update:model-value="handleCustomOptions" />
-                </template>
-              </div>
+                  <p v-if="!presets.length && customOptions === null" class="settings-hint">
+                    No presets yet. Choose options, then save them as a preset to use them again.
+                  </p>
 
-              <div v-if="isBatch" class="flex items-start gap-3 rounded-md border border-border p-3">
-                <ToggleSwitch :model-value="force" @update:model-value="handleForce" />
-                <span class="text-sm">Also convert books that already look converted, and overwrite existing _kcc copies</span>
-              </div>
-              <div
-                v-else-if="forceWarning && !running && job?.state !== 'done'"
-                class="flex items-start gap-3 rounded-md border border-warning/40 bg-warning/10 p-3"
-              >
-                <AlertTriangle :size="16" class="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
-                <div class="min-w-0 flex-1 space-y-2 text-sm">
-                  <p>{{ forceWarning }}</p>
-                  <label class="flex items-center gap-2">
-                    <ToggleSwitch :model-value="force" @update:model-value="handleForce" />
-                    Convert anyway
-                  </label>
+                  <template v-if="schema && customOptions !== null">
+                    <div class="flex flex-col gap-2 rounded-md border border-border bg-muted/30 p-3 sm:flex-row sm:items-center">
+                      <input
+                        v-model="newPresetName"
+                        type="text"
+                        maxlength="100"
+                        class="input-field flex-1"
+                        placeholder="New preset name, e.g. Manga - Libra Colour"
+                        aria-label="New preset name"
+                      />
+                      <Button size="sm" variant="outline" :disabled="!canSaveNew" @click="handleSaveNew">
+                        <Save :size="14" aria-hidden="true" />
+                        Save as new preset
+                      </Button>
+                      <Button v-if="selectedPreset" size="sm" variant="outline" :disabled="savingPreset" @click="handleUpdatePreset">
+                        Update "{{ selectedPreset.name }}"
+                      </Button>
+                    </div>
+                    <p class="settings-hint">Not saving is fine too: Convert uses these options just this once.</p>
+                    <KccOptionsForm :schema="schema" :model-value="customOptions" :disabled="running" @update:model-value="handleCustomOptions" />
+                  </template>
+                </div>
+
+                <div v-if="isBatch" class="flex items-start gap-3 rounded-md border border-border p-3">
+                  <ToggleSwitch :model-value="force" @update:model-value="handleForce" />
+                  <span class="text-sm">Also convert books that already look converted, and overwrite existing _kcc copies</span>
+                </div>
+                <div
+                  v-else-if="forceWarning && !running && job?.state !== 'done'"
+                  class="flex items-start gap-3 rounded-md border border-warning/40 bg-warning/10 p-3"
+                >
+                  <AlertTriangle :size="16" class="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
+                  <div class="min-w-0 flex-1 space-y-2 text-sm">
+                    <p>{{ forceWarning }}</p>
+                    <label class="flex items-center gap-2">
+                      <ToggleSwitch :model-value="force" @update:model-value="handleForce" />
+                      Convert anyway
+                    </label>
+                  </div>
                 </div>
               </div>
-
+              <p
+                v-if="removePages.length && mode === 'replace' && !running && job?.state !== 'done'"
+                class="flex items-start gap-2 text-sm text-warning"
+              >
+                <AlertTriangle :size="16" class="mt-0.5 shrink-0" aria-hidden="true" />
+                The {{ removePages.length }} removed {{ removePages.length === 1 ? 'page' : 'pages' }} will be gone from the book's file, since
+                Replace swaps it for the CBZ.
+              </p>
               <div v-if="running" class="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 :size="16" class="animate-spin" aria-hidden="true" />
                 Converting... You can close this window: the card in the corner shows when it's done.

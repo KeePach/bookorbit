@@ -1,5 +1,18 @@
 import { Transform, Type } from 'class-transformer';
-import { IsBoolean, IsIn, IsInt, IsISO8601, IsObject, IsOptional, IsString, Length, Min, ValidateNested } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsISO8601,
+  IsObject,
+  IsOptional,
+  IsString,
+  Length,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 
 import { BulkSelectionDto } from '../../../common/dto/bulk-selection.dto';
 
@@ -31,6 +44,13 @@ export class KccConvertDto {
   @IsOptional()
   @IsBoolean()
   force?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5000)
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  removePages?: number[];
 }
 
 export class KccBatchConvertDto extends KccConvertDto {

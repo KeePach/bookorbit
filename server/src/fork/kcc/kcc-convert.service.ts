@@ -12,6 +12,7 @@ import {
   type KccConvertJob,
   type KccConvertRequest,
   type KccJobList,
+  type KccPagesInfo,
   type KccOptionValues,
 } from '@bookorbit/types';
 
@@ -30,6 +31,7 @@ import { buildKccArgs, validateOptionValues } from './kcc-args';
 import { KccClientService } from './kcc-client.service';
 import { countZipImages, keepCopyName, looksConvertedByKcc, readZipEntryPaths } from './kcc-detect';
 import { KccFilePlacementService } from './kcc-file-placement.service';
+import { KCC_PAGE_FORMATS, KccPagesService } from './kcc-pages.service';
 import { kccConfig } from './kcc.config';
 import { type KccBookFile, KccRepository } from './kcc.repository';
 
@@ -73,6 +75,7 @@ export class KccConvertService {
     private readonly bookService: BookService,
     private readonly fileWriteRepo: FileWriteRepository,
     private readonly fileRename: FileRenameService,
+    private readonly pages: KccPagesService,
     @Inject(kccConfig.KEY) private readonly config: ConfigType<typeof kccConfig>,
   ) {}
 
@@ -134,6 +137,13 @@ export class KccConvertService {
       throw new ConflictException({ errorCode: 'KCC_JOB_RUNNING', message: 'This book is already being converted' });
     }
 
+    const removePages = [...new Set(request.removePages ?? [])].sort((a, b) => a - b);
+    if (removePages.length > 0 && !KCC_PAGE_FORMATS.has(check.format ?? '')) {
+      throw new BadRequestException({
+        errorCode: 'KCC_BAD_PAGES',
+        message: `Choosing pages isn't supported for ${check.format?.toUpperCase() ?? 'this'} files`,
+      });
+    }
     const options = await this.resolveOptions(user, request);
     const schema = await this.client.schema();
     const { args, ignored } = buildKccArgs(options, schema.groups);
@@ -149,14 +159,25 @@ export class KccConvertService {
       outputName: null,
       warning: null,
       ignoredOptions: ignored,
+      removedPages: removePages.length,
       createdAt: new Date().toISOString(),
       finishedAt: null,
       updatedAt: new Date().toISOString(),
     };
     this.jobs.set(job.id, job);
     this.pruneJobs();
-    this.queue = this.queue.then(() => this.run(user, job, args, Boolean(request.force)));
+    this.queue = this.queue.then(() => this.run(user, job, args, Boolean(request.force), removePages));
     return this.toDto(job);
+  }
+
+  async pagesInfo(user: RequestUser, bookId: number): Promise<KccPagesInfo> {
+    return this.pages.info(user, await this.loadFile(user, bookId));
+  }
+
+  async pageThumbnail(user: RequestUser, bookId: number, pageIndex: number): Promise<{ data: Buffer; etag: string }> {
+    const file = await this.loadFile(user, bookId);
+    if (!KCC_PAGE_FORMATS.has(file.format?.toLowerCase() ?? '')) throw new NotFoundException('This file has no comic pages');
+    return this.pages.thumbnail(user, file, pageIndex);
   }
 
   getJob(user: RequestUser, id: string): KccConvertJob {
@@ -188,6 +209,9 @@ export class KccConvertService {
    */
   async startMany(user: RequestUser, selection: BulkSelectionDto, request: KccConvertRequest): Promise<KccBatchConvertResult> {
     const startedAt = Date.now();
+    if (request.removePages?.length) {
+      throw new BadRequestException({ errorCode: 'KCC_BAD_PAGES', message: 'Pages can only be chosen when converting one book' });
+    }
     const unique = [...new Set(await this.bookService.resolveSelectionToIds(selection, user, 'editor'))];
     if (unique.length > MAX_BATCH_BOOKS) {
       throw new BadRequestException({
@@ -221,7 +245,7 @@ export class KccConvertService {
     return latest ? this.toDto(latest) : null;
   }
 
-  private async run(user: RequestUser, job: JobRecord, args: string[], force: boolean): Promise<void> {
+  private async run(user: RequestUser, job: JobRecord, args: string[], force: boolean, removePages: number[]): Promise<void> {
     const startedAt = Date.now();
     const jobDir = join(this.config.workDir, job.id);
     job.state = 'running';
@@ -234,8 +258,14 @@ export class KccConvertService {
       const outputDir = join(jobDir, 'out');
       await mkdir(inputDir, { recursive: true });
       await mkdir(outputDir, { recursive: true });
-      const input = join(inputDir, `book${extname(file.absolutePath).toLowerCase()}`);
-      await copyFile(file.absolutePath, input);
+      let input = join(inputDir, `book${extname(file.absolutePath).toLowerCase()}`);
+      if (removePages.length > 0) {
+        // The reader's pages minus the removed ones, as a CBZ in reading order.
+        input = join(inputDir, 'book.cbz');
+        await this.pages.writeWithoutPages(user, file, removePages, join(jobDir, 'pages'), input);
+      } else {
+        await copyFile(file.absolutePath, input);
+      }
 
       const remoteId = await this.client.startJob(relative(this.config.workDir, input), relative(this.config.workDir, outputDir), args);
       const output = await this.waitForOutput(remoteId);
@@ -375,6 +405,7 @@ export class KccConvertService {
       outputName: job.outputName,
       warning: job.warning,
       ignoredOptions: job.ignoredOptions,
+      removedPages: job.removedPages,
       createdAt: job.createdAt,
       finishedAt: job.finishedAt,
       updatedAt: job.updatedAt,

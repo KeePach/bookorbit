@@ -6,6 +6,7 @@ import { useKccConvertDialog } from '../composables/useKccConvertDialog'
 import { resetKccJobTracker } from '../lib/kcc-job-tracker'
 
 const api = vi.hoisted(() => ({
+  pages: vi.fn(),
   convertMany: vi.fn(),
   jobs: vi.fn(),
   createPreset: vi.fn(),
@@ -165,5 +166,48 @@ describe('KccConvertDialogHost', () => {
     await flushPromises()
 
     expect(api.convertMany).toHaveBeenCalledWith({ mode: 'keep', presetId: 2, selection: { query: { libraryId: 9 } } })
+  })
+
+  it('leaves out the pages removed on the Pages tab, with shift-click ranges and undo', async () => {
+    api.pages.mockResolvedValue({ supported: true, reason: null, pageCount: 5 })
+    await openDialog()
+
+    button('Pages').click()
+    await flushPromises()
+    const page = (n: number) => dialog().querySelector<HTMLButtonElement>(`button[aria-label="Page ${n}"]`)!
+    expect(page(1).querySelector('img')!.getAttribute('src')).toBe('/api/v1/fork/kcc/books/4/pages/0/thumb')
+
+    page(2).click()
+    await flushPromises()
+    page(3).dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }))
+    await flushPromises()
+    button('Remove selected').click()
+    await flushPromises()
+
+    expect(page(2)).toBeNull()
+    expect(dialog().textContent).toContain('Removed 2 pages: 2-3')
+    expect(dialog().textContent).toContain('Pages (2 removed)')
+
+    page(5).click()
+    await flushPromises()
+    button('Remove selected').click()
+    await flushPromises()
+    button('Undo').click()
+    await flushPromises()
+    expect(page(5)).not.toBeNull()
+
+    button('Convert').click()
+    await flushPromises()
+    expect(api.convert).toHaveBeenCalledWith(4, { mode: 'keep', presetId: 2, removePages: [1, 2] })
+  })
+
+  it('says a PDF has no page choice', async () => {
+    api.check.mockResolvedValue(check({ fileName: 'Scan.pdf', format: 'pdf' }))
+    api.pages.mockResolvedValue({ supported: false, reason: "Choosing pages isn't supported for PDF files", pageCount: 0 })
+    await openDialog()
+
+    button('Pages').click()
+    await flushPromises()
+    expect(dialog().textContent).toContain("Choosing pages isn't supported for PDF files. The whole file is converted.")
   })
 })

@@ -1,15 +1,18 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseIntPipe, ParseUUIDPipe, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseIntPipe, ParseUUIDPipe, Post, Put, Query, Res } from '@nestjs/common';
 
 import {
   Permission,
   type KccBatchConvertResult,
   type KccConvertCheck,
   type KccJobList,
+  type KccPagesInfo,
   type KccConvertJob,
   type KccOptionSchema,
   type KccPreset,
   type KccStatus,
 } from '@bookorbit/types';
+
+import type { FastifyReply } from 'fastify';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
@@ -63,6 +66,25 @@ export class KccController {
   @Get('books/:bookId/check')
   check(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number): Promise<KccConvertCheck> {
     return this.converter.check(user, bookId);
+  }
+
+  @Get('books/:bookId/pages')
+  pages(@CurrentUser() user: RequestUser, @Param('bookId', ParseIntPipe) bookId: number): Promise<KccPagesInfo> {
+    return this.converter.pagesInfo(user, bookId);
+  }
+
+  @Get('books/:bookId/pages/:pageIndex/thumb')
+  async pageThumbnail(
+    @CurrentUser() user: RequestUser,
+    @Param('bookId', ParseIntPipe) bookId: number,
+    @Param('pageIndex', ParseIntPipe) pageIndex: number,
+    @Res() reply: FastifyReply,
+  ): Promise<void> {
+    const thumb = await this.converter.pageThumbnail(user, bookId, pageIndex);
+    reply.header('Cache-Control', 'private, max-age=600');
+    reply.header('ETag', thumb.etag);
+    reply.type('image/webp');
+    reply.send(thumb.data);
   }
 
   @Get('books/:bookId/job')

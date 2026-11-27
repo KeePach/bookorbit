@@ -61,6 +61,8 @@ export function useKccConvert() {
   const presetId = ref<number | null>(null)
   const customOptions = ref<KccOptionValues | null>(null)
   const force = ref(false)
+  /** Pages to leave out (0-based, reader order); only for one book. */
+  const removePages = ref<number[]>([])
 
   const isBatch = computed(() => singleBookId.value === null)
   const job = computed<KccConvertJob | null>(() => (jobId.value ? (kccProgress.jobs.get(jobId.value) ?? null) : null))
@@ -122,6 +124,7 @@ export function useKccConvert() {
     check.value = null
     force.value = false
     customOptions.value = null
+    removePages.value = []
     if (next.count > MAX_BATCH_BOOKS) {
       error.value = `KCC converts at most ${MAX_BATCH_BOOKS} books at a time. Select fewer.`
       loading.value = false
@@ -185,6 +188,7 @@ export function useKccConvert() {
       mode: mode.value,
       ...(customOptions.value !== null ? { options: customOptions.value } : presetId.value !== null ? { presetId: presetId.value } : {}),
       ...(force.value ? { force: true } : {}),
+      ...(!isBatch.value && removePages.value.length ? { removePages: removePages.value } : {}),
     }
   }
 
@@ -231,6 +235,7 @@ export function useKccConvert() {
     presetId,
     customOptions,
     force,
+    removePages,
     running,
     selectedPreset,
     modeBlockedReason,
