@@ -54,8 +54,12 @@ export function resolveLinks(
     .sort((a, b) => a.fieldId - b.fieldId);
 }
 
-/** Changes whenever a library gains, loses or relinks a field, so its books are read again. */
-export function linksSignature(links: LinkedField[]): string {
-  const text = links.map((link) => `${link.fieldId}:${link.fieldType}:${link.column}`).join('|');
+/**
+ * Changes whenever a library gains, loses or relinks a field, or the subtitle column changes, so its
+ * books are read again.
+ */
+export function linksSignature(links: LinkedField[], subtitleColumn: string | null = null): string {
+  let text = links.map((link) => `${link.fieldId}:${link.fieldType}:${link.column}`).join('|');
+  if (subtitleColumn) text += `|subtitle:${subtitleColumn}`;
   return createHash('sha1').update(text).digest('hex');
 }

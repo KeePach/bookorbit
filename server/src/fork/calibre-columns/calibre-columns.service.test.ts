@@ -5,7 +5,9 @@ import { join } from 'path';
 import { BadRequestException } from '@nestjs/common';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
+import type { BookMetadataLockService } from '../../modules/book-metadata-lock/book-metadata-lock.service';
 import type { CustomMetadataService } from '../../modules/custom-metadata/custom-metadata.service';
+import type { MetadataScoreService } from '../../modules/metadata-score/metadata-score.service';
 import { calibreLibraryOpf } from './calibre-columns-test-fixtures';
 import type { CalibreColumnsRepository, LibraryField, PendingBook } from './calibre-columns.repository';
 import { CalibreColumnsService } from './calibre-columns.service';
@@ -15,9 +17,24 @@ describe('CalibreColumnsService', () => {
   let fields: LibraryField[];
   let pending: PendingBook[];
   let scanEnd: number;
-  type RepositoryMethod = 'ensureStateTable' | 'listActiveFieldsByLibrary' | 'latestScanEndByLibrary' | 'findPendingBooks' | 'recordStates';
+  let libraryIds: number[];
+  let lockedSubtitles: Set<number>;
+  type RepositoryMethod =
+    | 'ensureStateTable'
+    | 'listActiveFieldsByLibrary'
+    | 'listLibraryIds'
+    | 'latestScanEndByLibrary'
+    | 'findPendingBooks'
+    | 'recordStates'
+    | 'writeSubtitle';
   let repository: { [K in RepositoryMethod]: Mock<CalibreColumnsRepository[K]> };
   let customMetadata: { updateBookValues: Mock<CustomMetadataService['updateBookValues']> };
+  let locks: { getBookIdsWithLockedField: Mock<BookMetadataLockService['getBookIdsWithLockedField']> };
+  let score: { calculateAndSaveMany: Mock<MetadataScoreService['calculateAndSaveMany']> };
+
+  function book(bookId: number, opfPath: string, extra: Partial<PendingBook> = {}): PendingBook {
+    return { bookId, opfPath, opfMtime: null, opfSize: null, subtitle: null, subtitleWritten: null, ...extra };
+  }
 
   async function writeOpf(name: string, xml: string): Promise<string> {
     const path = join(dir, `${name}.opf`);
@@ -25,11 +42,14 @@ describe('CalibreColumnsService', () => {
     return path;
   }
 
-  async function makeService(links = ''): Promise<CalibreColumnsService> {
-    const service = new CalibreColumnsService(repository as unknown as CalibreColumnsRepository, customMetadata as unknown as CustomMetadataService, {
-      links,
-      pollSeconds: 0,
-    });
+  async function makeService(links = '', subtitleColumn: string | null = null): Promise<CalibreColumnsService> {
+    const service = new CalibreColumnsService(
+      repository as unknown as CalibreColumnsRepository,
+      customMetadata as unknown as CustomMetadataService,
+      locks as unknown as BookMetadataLockService,
+      score as unknown as MetadataScoreService,
+      { links, pollSeconds: 0, subtitleColumn },
+    );
     await service.onModuleInit();
     return service;
   }
@@ -43,16 +63,28 @@ describe('CalibreColumnsService', () => {
     ];
     pending = [];
     scanEnd = 1000;
+    libraryIds = [7];
+    lockedSubtitles = new Set();
     repository = {
       ensureStateTable: vi.fn<CalibreColumnsRepository['ensureStateTable']>().mockResolvedValue(undefined),
       listActiveFieldsByLibrary: vi.fn<CalibreColumnsRepository['listActiveFieldsByLibrary']>(() => Promise.resolve(fields)),
-      latestScanEndByLibrary: vi.fn<CalibreColumnsRepository['latestScanEndByLibrary']>(() => Promise.resolve(new Map([[7, scanEnd]]))),
+      listLibraryIds: vi.fn<CalibreColumnsRepository['listLibraryIds']>(() => Promise.resolve(libraryIds)),
+      latestScanEndByLibrary: vi.fn<CalibreColumnsRepository['latestScanEndByLibrary']>((ids: number[]) =>
+        Promise.resolve(new Map(ids.map((id) => [id, scanEnd]))),
+      ),
       findPendingBooks: vi.fn<CalibreColumnsRepository['findPendingBooks']>((_libraryId: number, _signature: string, after: number) =>
         Promise.resolve(pending.filter((book) => book.bookId > after)),
       ),
       recordStates: vi.fn<CalibreColumnsRepository['recordStates']>().mockResolvedValue(undefined),
+      writeSubtitle: vi.fn<CalibreColumnsRepository['writeSubtitle']>().mockResolvedValue(true),
     };
     customMetadata = { updateBookValues: vi.fn<CustomMetadataService['updateBookValues']>().mockResolvedValue(undefined) };
+    locks = {
+      getBookIdsWithLockedField: vi.fn<BookMetadataLockService['getBookIdsWithLockedField']>((ids: number[]) =>
+        Promise.resolve(new Set(ids.filter((id) => lockedSubtitles.has(id)))),
+      ),
+    };
+    score = { calculateAndSaveMany: vi.fn<MetadataScoreService['calculateAndSaveMany']>().mockResolvedValue(undefined) };
   });
 
   afterEach(async () => {
@@ -69,7 +101,7 @@ describe('CalibreColumnsService', () => {
         { lookup: '#unlinked', value: 'ignored' },
       ]),
     );
-    pending = [{ bookId: 11, opfPath, opfMtime: '2026-11-15 12:02:00.123456+00', opfSize: 4096 }];
+    pending = [book(11, opfPath, { opfMtime: '2026-11-15 12:02:00.123456+00', opfSize: 4096 })];
 
     const service = await makeService('kobo_shelf=#category');
     const [summary] = await service.sync();
@@ -80,14 +112,25 @@ describe('CalibreColumnsService', () => {
       { fieldId: 3, value: 297977 },
     ]);
     expect(repository.recordStates).toHaveBeenCalledWith([
-      { bookId: 11, opfPath, opfMtime: '2026-11-15 12:02:00.123456+00', opfSize: 4096, signature: expect.any(String) },
+      { bookId: 11, opfPath, opfMtime: '2026-11-15 12:02:00.123456+00', opfSize: 4096, signature: expect.any(String), subtitleWritten: null },
     ]);
-    expect(summary).toEqual({ libraryId: 7, booksRead: 1, booksUnreadable: 0, valuesWritten: 3, valuesCleared: 0, valuesRefused: 0 });
+    expect(summary).toEqual({
+      libraryId: 7,
+      booksRead: 1,
+      booksUnreadable: 0,
+      valuesWritten: 3,
+      valuesCleared: 0,
+      valuesRefused: 0,
+      subtitlesWritten: 0,
+      subtitlesCleared: 0,
+      subtitlesLocked: 0,
+    });
+    expect(repository.writeSubtitle).not.toHaveBeenCalled();
   });
 
   it('leaves a field alone when the OPF lacks its column, and clears it when the column is empty', async () => {
     const opfPath = await writeOpf('webnovel', calibreLibraryOpf('Webnovel', [{ lookup: '#collection', value: null }]));
-    pending = [{ bookId: 12, opfPath, opfMtime: null, opfSize: null }];
+    pending = [book(12, opfPath)];
 
     const [summary] = await (await makeService()).sync();
 
@@ -103,7 +146,7 @@ describe('CalibreColumnsService', () => {
         { lookup: '#words', value: 'many' },
       ]),
     );
-    pending = [{ bookId: 13, opfPath, opfMtime: null, opfSize: null }];
+    pending = [book(13, opfPath)];
 
     const [summary] = await (await makeService()).sync();
 
@@ -119,7 +162,7 @@ describe('CalibreColumnsService', () => {
         { lookup: '#words', datatype: 'int', value: 5 },
       ]),
     );
-    pending = [{ bookId: 14, opfPath, opfMtime: null, opfSize: null }];
+    pending = [book(14, opfPath)];
     customMetadata.updateBookValues.mockImplementation((_book, _library, values) =>
       values.some((value) => value.fieldId === 3)
         ? Promise.reject(new BadRequestException('Custom metadata field 3 is not enabled for this book'))
@@ -133,7 +176,7 @@ describe('CalibreColumnsService', () => {
   });
 
   it('skips an unreadable metadata.opf without recording it, so a later scan retries it', async () => {
-    pending = [{ bookId: 15, opfPath: join(dir, 'missing.opf'), opfMtime: null, opfSize: null }];
+    pending = [book(15, join(dir, 'missing.opf'))];
 
     const [summary] = await (await makeService()).sync();
 
@@ -171,7 +214,7 @@ describe('CalibreColumnsService', () => {
 
   it('pages through a large library', async () => {
     const opfPath = await writeOpf('page', calibreLibraryOpf('Page', [{ lookup: '#collection', value: 'Fanfic' }]));
-    pending = Array.from({ length: 450 }, (_, index) => ({ bookId: index + 1, opfPath, opfMtime: null, opfSize: null }));
+    pending = Array.from({ length: 450 }, (_, index) => book(index + 1, opfPath));
     repository.findPendingBooks.mockImplementation((_l: number, _s: string, after: number, limit: number) =>
       Promise.resolve(pending.filter((book) => book.bookId > after).slice(0, limit)),
     );
@@ -191,6 +234,84 @@ describe('CalibreColumnsService', () => {
 
     expect(repository.listActiveFieldsByLibrary).toHaveBeenCalledTimes(2);
     expect(second).toBe(third);
+  });
+
+  describe('subtitle', () => {
+    it('copies the Calibre subtitle into a library without custom fields and rescores the book', async () => {
+      fields = [];
+      libraryIds = [7, 8];
+      const opfPath = await writeOpf('sub', calibreLibraryOpf('Sub', [{ lookup: '#subtitle', value: 'A Tale of Two Cats' }]));
+      pending = [book(21, opfPath, { subtitle: 'Old' })];
+
+      const summaries = await (await makeService('', '#subtitle')).sync();
+
+      expect(summaries.map((summary) => summary.libraryId)).toEqual([7, 8]);
+      expect(repository.writeSubtitle).toHaveBeenCalledWith(21, 'Old', 'A Tale of Two Cats');
+      expect(score.calculateAndSaveMany).toHaveBeenCalledWith([21]);
+      expect(repository.recordStates.mock.calls[0][0]).toEqual([expect.objectContaining({ bookId: 21, subtitleWritten: 'A Tale of Two Cats' })]);
+      expect(summaries[0]).toMatchObject({ subtitlesWritten: 1, subtitlesCleared: 0, valuesWritten: 0 });
+    });
+
+    it('keeps a subtitle from elsewhere when the Calibre column is empty', async () => {
+      const opfPath = await writeOpf('empty', calibreLibraryOpf('Empty', [{ lookup: '#subtitle', value: null }]));
+      pending = [book(22, opfPath, { subtitle: 'From a provider' })];
+
+      const [summary] = await (await makeService('', '#subtitle')).sync();
+
+      expect(repository.writeSubtitle).not.toHaveBeenCalled();
+      expect(score.calculateAndSaveMany).not.toHaveBeenCalled();
+      expect(repository.recordStates.mock.calls[0][0]).toEqual([expect.objectContaining({ bookId: 22, subtitleWritten: null })]);
+      expect(summary).toMatchObject({ subtitlesWritten: 0, subtitlesCleared: 0 });
+    });
+
+    it('clears a subtitle it wrote once Calibre has none', async () => {
+      const opfPath = await writeOpf('cleared', calibreLibraryOpf('Cleared', [{ lookup: '#subtitle', value: '' }]));
+      pending = [book(23, opfPath, { subtitle: 'From Calibre', subtitleWritten: 'From Calibre' })];
+
+      const [summary] = await (await makeService('', '#subtitle')).sync();
+
+      expect(repository.writeSubtitle).toHaveBeenCalledWith(23, 'From Calibre', null);
+      expect(summary).toMatchObject({ subtitlesCleared: 1 });
+    });
+
+    it('never touches a locked Subtitle field', async () => {
+      lockedSubtitles = new Set([24]);
+      const opfPath = await writeOpf('locked', calibreLibraryOpf('Locked', [{ lookup: '#subtitle', value: 'Calibre' }]));
+      pending = [book(24, opfPath, { subtitle: 'Mine' })];
+
+      const [summary] = await (await makeService('', '#subtitle')).sync();
+
+      expect(repository.writeSubtitle).not.toHaveBeenCalled();
+      expect(summary).toMatchObject({ subtitlesLocked: 1, subtitlesWritten: 0 });
+    });
+
+    it('owns nothing when the subtitle changed before it could be written', async () => {
+      repository.writeSubtitle.mockResolvedValue(false);
+      const opfPath = await writeOpf('race', calibreLibraryOpf('Race', [{ lookup: '#subtitle', value: 'Calibre' }]));
+      pending = [book(25, opfPath)];
+
+      const [summary] = await (await makeService('', '#subtitle')).sync();
+
+      expect(repository.recordStates.mock.calls[0][0]).toEqual([expect.objectContaining({ bookId: 25, subtitleWritten: null })]);
+      expect(summary).toMatchObject({ subtitlesWritten: 0 });
+      expect(score.calculateAndSaveMany).not.toHaveBeenCalled();
+    });
+
+    it('reads every book again when the subtitle column is switched on', async () => {
+      await (await makeService()).sync();
+      await (await makeService('', '#subtitle')).sync();
+
+      const [withoutSubtitle, withSubtitle] = repository.findPendingBooks.mock.calls.map((call) => call[1]);
+      expect(withSubtitle).not.toBe(withoutSubtitle);
+    });
+
+    it('leaves subtitles and libraries without fields alone when switched off', async () => {
+      fields = [];
+      libraryIds = [7, 8];
+
+      expect(await (await makeService('', null)).sync()).toEqual([]);
+      expect(repository.listLibraryIds).not.toHaveBeenCalled();
+    });
   });
 
   it('turns itself off when the state table cannot be created', async () => {
