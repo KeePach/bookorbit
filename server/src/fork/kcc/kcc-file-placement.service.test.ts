@@ -29,6 +29,7 @@ describe('KccFilePlacementService', () => {
     format,
     fileHash: 'a'.repeat(32),
     fileWriteEnabled: true,
+    fileRenameEnabled: true,
     excludePatterns: ['*_kcc.cbz'],
   });
 

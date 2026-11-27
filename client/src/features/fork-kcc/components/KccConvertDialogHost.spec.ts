@@ -30,7 +30,7 @@ function check(overrides: Partial<KccConvertCheck> = {}): KccConvertCheck {
     format: 'cbr',
     alreadyConverted: false,
     canReplace: false,
-    replaceBlockedReason: 'This library is set to leave files untouched',
+    replaceBlockedReason: "Replace isn't allowed in this library. Turn on Write to file and Rename files for it in Settings > Libraries.",
     canKeep: true,
     keepBlockedReason: null,
     keepCopyName: 'Akira v01_kcc.cbz',
@@ -98,7 +98,9 @@ describe('KccConvertDialogHost', () => {
 
     expect(dialog().textContent).toContain('Adds Akira v01_kcc.cbz next to it')
     expect(button('Replace original').disabled).toBe(true)
-    expect(dialog().textContent).toContain('Replace: This library is set to leave files untouched')
+    expect(button('Replace original').textContent).toContain(
+      "Replace isn't allowed in this library. Turn on Write to file and Rename files for it in Settings > Libraries.",
+    )
 
     button('Convert').click()
     await flushPromises()

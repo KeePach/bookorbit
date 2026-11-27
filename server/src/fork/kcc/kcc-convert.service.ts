@@ -33,6 +33,16 @@ import { KccFilePlacementService } from './kcc-file-placement.service';
 import { kccConfig } from './kcc.config';
 import { type KccBookFile, KccRepository } from './kcc.repository';
 
+/**
+ * Replace rewrites and renames the book's file, so the library must allow both. Names the settings
+ * to turn on, as Settings > Libraries labels them.
+ */
+export function replaceNotAllowedReason(file: Pick<KccBookFile, 'fileWriteEnabled' | 'fileRenameEnabled'>): string | null {
+  const missing = [file.fileWriteEnabled ? null : 'Write to file', file.fileRenameEnabled ? null : 'Rename files'].filter(Boolean);
+  if (missing.length === 0) return null;
+  return `Replace isn't allowed in this library. Turn on ${missing.join(' and ')} for it in Settings > Libraries.`;
+}
+
 /** Formats KCC reads (with bsdtar/7z in its container) and BookOrbit offers to convert. */
 export const KCC_SOURCE_FORMATS = new Set(['cbz', 'cbr', 'cb7', 'pdf']);
 const FINISHED_JOB_TTL_MS = 6 * 3600_000;
@@ -89,8 +99,7 @@ export class KccConvertService {
     }
 
     const unsupported = supported ? null : `KCC can't convert ${format ? format.toUpperCase() : 'this'} files here (CBZ, CBR, CB7 and PDF only)`;
-    const replaceBlockedReason =
-      unsupported ?? (file.fileWriteEnabled ? null : 'This library is set to leave files untouched (Library settings > File updates)');
+    const replaceBlockedReason = unsupported ?? replaceNotAllowedReason(file);
     const skipsCopy = buildNameExcludeMatcher(file.excludePatterns)(copyName);
     const keepBlockedReason =
       unsupported ?? (skipsCopy ? null : 'Add *_kcc.cbz to this library\'s "Skip files matching" first, or the copy becomes a separate book');
@@ -259,13 +268,14 @@ export class KccConvertService {
   }
 
   /**
-   * The same rename as "Write to File & Rename": the library's naming pattern (or the app's default),
-   * forced even where automatic renaming is off. The conversion already succeeded, so a failed or
+   * The same rename as "Write to File & Rename": the library's naming pattern (or the app's default).
+   * Replace is only offered where the library renames files, so this is not forced; if the setting
+   * was turned off meanwhile, the rename is skipped. The conversion already succeeded, so a failed or
    * skipped rename only leaves a warning on the job.
    */
   private async renameLikeTheButton(user: RequestUser, job: JobRecord): Promise<void> {
     try {
-      const result = await this.fileRename.performRename(job.bookId, user.id, true, true);
+      const result = await this.fileRename.performRename(job.bookId, user.id, false, true);
       if (result.status === 'success' && result.newPath) job.outputName = basename(result.newPath);
       else if (result.status === 'failed') job.warning = `Converted, but not renamed: ${result.reason ?? 'rename failed'}`;
       else if (result.reason && result.reason !== 'path unchanged') job.warning = `Converted, but not renamed: ${result.reason}`;

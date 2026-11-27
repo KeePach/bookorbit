@@ -56,7 +56,11 @@ const replaceDisabled = computed(() => running.value || (!isBatch.value && check
 const keepHint = computed(() =>
   isBatch.value || !check.value ? 'Adds Name_kcc.cbz next to each book' : `Adds ${check.value.keepCopyName} next to it`,
 )
-const replaceHint = computed(() => (isBatch.value ? "Each book's file becomes the CBZ" : "The book's file becomes the CBZ"))
+const replaceHint = computed(() =>
+  isBatch.value
+    ? "Each book's file becomes the CBZ, renamed with the library's pattern"
+    : "The book's file becomes the CBZ, renamed with the library's pattern",
+)
 const canSaveNew = computed(() => !savingPreset.value && newPresetName.value.trim().length > 0)
 
 watch(target, (next) => {
@@ -152,27 +156,27 @@ function handleStart(): void {
                 <div class="grid gap-2 sm:grid-cols-2">
                   <button
                     type="button"
-                    class="rounded-md border p-3 text-start transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                    class="rounded-md border p-3 text-start transition-colors disabled:cursor-not-allowed disabled:border-dashed disabled:bg-muted/30"
                     :class="mode === 'keep' ? 'border-primary bg-primary/10' : 'border-input hover:bg-muted'"
                     :disabled="keepDisabled"
                     @click="handleKeep"
                   >
                     <span class="block text-sm font-medium">Keep original</span>
-                    <span class="block text-xs text-muted-foreground">{{ keepHint }}</span>
+                    <span v-if="check && !check.canKeep" class="block text-xs text-warning">{{ check.keepBlockedReason }}</span>
+                    <span v-else class="block text-xs text-muted-foreground">{{ keepHint }}</span>
                   </button>
                   <button
                     type="button"
-                    class="rounded-md border p-3 text-start transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                    class="rounded-md border p-3 text-start transition-colors disabled:cursor-not-allowed disabled:border-dashed disabled:bg-muted/30"
                     :class="mode === 'replace' ? 'border-primary bg-primary/10' : 'border-input hover:bg-muted'"
                     :disabled="replaceDisabled"
                     @click="handleReplace"
                   >
                     <span class="block text-sm font-medium">Replace original</span>
-                    <span class="block text-xs text-muted-foreground">{{ replaceHint }}</span>
+                    <span v-if="check && !check.canReplace" class="block text-xs text-warning">{{ check.replaceBlockedReason }}</span>
+                    <span v-else class="block text-xs text-muted-foreground">{{ replaceHint }}</span>
                   </button>
                 </div>
-                <p v-if="check && !check.canKeep" class="settings-hint">Keep: {{ check.keepBlockedReason }}</p>
-                <p v-if="check && !check.canReplace" class="settings-hint">Replace: {{ check.replaceBlockedReason }}</p>
                 <p v-if="isBatch" class="settings-hint">Books that can't be converted this way are skipped and listed with the reason.</p>
               </div>
 

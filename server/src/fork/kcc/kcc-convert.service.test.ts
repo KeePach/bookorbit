@@ -49,6 +49,7 @@ describe('KccConvertService', () => {
       format: 'cbr',
       fileHash: 'a'.repeat(32),
       fileWriteEnabled: true,
+      fileRenameEnabled: true,
       excludePatterns: ['*_kcc.cbz'],
     };
     await makeCbz(file.absolutePath, ['001.jpg', '002.jpg']);
@@ -130,7 +131,7 @@ describe('KccConvertService', () => {
     expect(placedContent?.comicInfo).toContain('<PageCount>3</PageCount>');
     expect(placedContent?.comicInfo).toContain('<Summary>Space opera</Summary>');
     expect(placement.replace).toHaveBeenCalledWith(file, expect.any(String), expect.stringMatching(/^[0-9a-f]{32}$/), job.id);
-    expect(fileRename.performRename).toHaveBeenCalledWith(9, user.id, true, true);
+    expect(fileRename.performRename).toHaveBeenCalledWith(9, user.id, false, true);
     expect(service.getJob(user, job.id)).toMatchObject({ title: 'Saga 1', state: 'done', outputName: 'Saga 001.cbz', error: null, warning: null });
     const listed = service.listJobs(user);
     expect(listed.jobs.map((entry) => entry.state)).toEqual(['done']);
@@ -172,9 +173,20 @@ describe('KccConvertService', () => {
     expect(placement.keep).not.toHaveBeenCalled();
   });
 
-  it('blocks Replace in a library that leaves files untouched, and Keep without the skip pattern', async () => {
-    file = { ...file, fileWriteEnabled: false, excludePatterns: [] };
-    await expect(service.start(user, 9, { mode: 'replace' })).rejects.toMatchObject({ response: { errorCode: 'KCC_REPLACE_BLOCKED' } });
+  it('blocks Replace unless the library writes and renames files, and Keep without the skip pattern', async () => {
+    file = { ...file, fileWriteEnabled: false, fileRenameEnabled: false, excludePatterns: [] };
+    await expect(service.start(user, 9, { mode: 'replace' })).rejects.toMatchObject({
+      response: {
+        errorCode: 'KCC_REPLACE_BLOCKED',
+        message: "Replace isn't allowed in this library. Turn on Write to file and Rename files for it in Settings > Libraries.",
+      },
+    });
+    file = { ...file, fileWriteEnabled: true, fileRenameEnabled: false };
+    expect((await service.check(user, 9)).replaceBlockedReason).toBe(
+      "Replace isn't allowed in this library. Turn on Rename files for it in Settings > Libraries.",
+    );
+    file = { ...file, fileWriteEnabled: false, fileRenameEnabled: true };
+    expect((await service.check(user, 9)).replaceBlockedReason).toMatch(/Turn on Write to file for it/);
     await expect(service.start(user, 9, { mode: 'keep' })).rejects.toMatchObject({ response: { errorCode: 'KCC_KEEP_BLOCKED' } });
   });
 

@@ -20,6 +20,7 @@ export interface KccBookFile {
   format: string | null;
   fileHash: string | null;
   fileWriteEnabled: boolean;
+  fileRenameEnabled: boolean;
   excludePatterns: string[];
 }
 
@@ -49,6 +50,7 @@ export class KccRepository implements OnModuleInit {
         format: bookFiles.format,
         fileHash: bookFiles.fileHash,
         fileWriteEnabled: libraries.fileWriteEnabled,
+        fileRenameEnabled: libraries.fileRenameEnabled,
         excludePatterns: libraries.excludePatterns,
       })
       .from(books)
