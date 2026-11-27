@@ -2,22 +2,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import type { KccConvertCheck, KccConvertJob } from '@bookorbit/types'
 import KccConvertDialogHost from './KccConvertDialogHost.vue'
+import type { kccApi } from '../lib/kcc-api'
 import { useKccConvertDialog } from '../composables/useKccConvertDialog'
 import { kccProgress, resetKccJobTracker } from '../lib/kcc-job-tracker'
 
+type KccApi = typeof kccApi
+
 const api = vi.hoisted(() => ({
-  pages: vi.fn(),
-  convertMany: vi.fn(),
-  jobs: vi.fn(),
-  createPreset: vi.fn(),
-  updatePreset: vi.fn(),
-  status: vi.fn(),
-  options: vi.fn(),
-  presets: vi.fn(),
-  check: vi.fn(),
-  latestJob: vi.fn(),
-  convert: vi.fn(),
-  job: vi.fn(),
+  pages: vi.fn<KccApi['pages']>(),
+  convertMany: vi.fn<KccApi['convertMany']>(),
+  jobs: vi.fn<KccApi['jobs']>(),
+  createPreset: vi.fn<KccApi['createPreset']>(),
+  updatePreset: vi.fn<KccApi['updatePreset']>(),
+  status: vi.fn<KccApi['status']>(),
+  options: vi.fn<KccApi['options']>(),
+  presets: vi.fn<KccApi['presets']>(),
+  check: vi.fn<KccApi['check']>(),
+  latestJob: vi.fn<KccApi['latestJob']>(),
+  convert: vi.fn<KccApi['convert']>(),
+  job: vi.fn<KccApi['job']>(),
 }))
 
 vi.mock('../lib/kcc-api', async (importOriginal) => ({ ...(await importOriginal<object>()), kccApi: api }))
@@ -49,6 +52,7 @@ const queued: KccConvertJob = {
   error: null,
   outputName: null,
   warning: null,
+  removedPages: 0,
   ignoredOptions: [],
   createdAt: '2026-11-26T00:00:00.000Z',
   finishedAt: null,
@@ -169,13 +173,13 @@ describe('KccConvertDialogHost', () => {
   })
 
   it('leaves out the pages removed on the Pages tab, with shift-click ranges and undo', async () => {
-    api.pages.mockResolvedValue({ supported: true, reason: null, pageCount: 5 })
+    api.pages.mockResolvedValue({ supported: true, reason: null, pageCount: 5, version: 'h1' })
     await openDialog()
 
     button('Pages').click()
     await flushPromises()
     const page = (n: number) => dialog().querySelector<HTMLButtonElement>(`button[aria-label="Page ${n}"]`)!
-    expect(page(1).querySelector('img')!.getAttribute('src')).toBe('/api/v1/fork/kcc/books/4/pages/0/thumb')
+    expect(page(1).querySelector('img')!.getAttribute('src')).toBe('/api/v1/fork/kcc/books/4/pages/0/thumb?v=h1')
 
     page(2).click()
     await flushPromises()
@@ -203,7 +207,7 @@ describe('KccConvertDialogHost', () => {
 
   it('says a PDF has no page choice', async () => {
     api.check.mockResolvedValue(check({ fileName: 'Scan.pdf', format: 'pdf' }))
-    api.pages.mockResolvedValue({ supported: false, reason: "Choosing pages isn't supported for PDF files", pageCount: 0 })
+    api.pages.mockResolvedValue({ supported: false, reason: "Choosing pages isn't supported for PDF files", pageCount: 0, version: 'h1' })
     await openDialog()
 
     button('Pages').click()

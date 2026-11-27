@@ -21,7 +21,7 @@ const canSave = computed(() => !saving.value && name.value.trim().length > 0)
 function edit(preset: KccPreset | null): void {
   selectedId.value = preset?.id ?? null
   name.value = preset?.name ?? ''
-  options.value = { ...(preset?.options ?? {}) }
+  options.value = { ...preset?.options }
   editing.value = true
 }
 

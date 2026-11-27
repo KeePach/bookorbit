@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
-import type { KccConvertJob } from '@bookorbit/types'
+import type { KccConvertJob, KccJobList } from '@bookorbit/types'
 import KccProgressCard from './KccProgressCard.vue'
 import { kccProgress, resetKccJobTracker, trackKccJobs } from '../lib/kcc-job-tracker'
 
-vi.mock('../lib/kcc-api', () => ({ kccApi: { jobs: vi.fn().mockResolvedValue({ jobs: [], serverTime: '', bootId: 'b' }) } }))
+vi.mock('../lib/kcc-api', () => ({ kccApi: { jobs: vi.fn<() => Promise<KccJobList>>().mockResolvedValue({ jobs: [], serverTime: '', bootId: 'b' }) } }))
 vi.mock('@/features/auth/composables/usePermissions', () => ({ usePermissions: () => ({ hasPermission: () => false }) }))
 
 function job(id: string, state: KccConvertJob['state']): KccConvertJob {
@@ -17,7 +17,7 @@ function job(id: string, state: KccConvertJob['state']): KccConvertJob {
     error: null,
     outputName: null,
     warning: null,
-    warning: null,
+    removedPages: 0,
     ignoredOptions: [],
     createdAt: '',
     finishedAt: null,

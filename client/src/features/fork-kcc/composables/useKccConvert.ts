@@ -169,7 +169,7 @@ export function useKccConvert() {
 
   /** Starts editing options, from the selected preset, for this conversion or to save. */
   function customize(): void {
-    customOptions.value = { ...(selectedPreset.value?.options ?? {}) }
+    customOptions.value = { ...selectedPreset.value?.options }
   }
 
   async function savePreset(name: string | null): Promise<void> {

@@ -560,7 +560,7 @@ describe('SelectionActionBar KCC conversion (fork)', () => {
   it('offers Convert with KCC only where the page handles it, and emits it', async () => {
     expect(mountBar().find('[data-testid="action-kcc-convert"]').exists()).toBe(false)
 
-    const onKccConvert = vi.fn()
+    const onKccConvert = vi.fn<() => void>()
     const wrapper = mount(SelectionActionBar, {
       props: { visible: true, count: 3, inCollection: false, inFlight: null, onKccConvert },
       global: globalStubs,

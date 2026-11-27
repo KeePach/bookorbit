@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { KccConvertJob } from '@bookorbit/types'
+import type { kccApi } from './kcc-api'
 
-const api = vi.hoisted(() => ({ jobs: vi.fn() }))
+const api = vi.hoisted(() => ({ jobs: vi.fn<typeof kccApi.jobs>() }))
 vi.mock('./kcc-api', () => ({ kccApi: api }))
 
 import { dismissKccProgress, kccSession, resetKccJobTracker, trackKccJobs } from './kcc-job-tracker'
@@ -20,7 +21,7 @@ function job(id: string, state: KccConvertJob['state'], extra: Partial<KccConver
     error: null,
     outputName: null,
     warning: null,
-    warning: null,
+    removedPages: 0,
     ignoredOptions: [],
     createdAt: '2026-11-26T00:00:00.000Z',
     finishedAt: null,
