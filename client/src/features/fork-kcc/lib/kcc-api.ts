@@ -4,6 +4,7 @@ import type {
   KccConvertCheck,
   KccConvertJob,
   KccConvertRequest,
+  KccJobList,
   KccOptionSchema,
   KccPreset,
   KccPresetInput,
@@ -26,7 +27,7 @@ export const kccApi = {
   convert: (bookId: number, request: KccConvertRequest) =>
     apiJson<KccConvertJob>(`${BASE}/books/${bookId}/convert`, jsonBody('POST', request), FALLBACK),
   convertMany: (request: KccBatchConvertRequest) => apiJson<KccBatchConvertResult>(`${BASE}/convert`, jsonBody('POST', request), FALLBACK),
-  jobs: () => apiJson<KccConvertJob[]>(`${BASE}/jobs`, undefined, FALLBACK),
+  jobs: (since?: string) => apiJson<KccJobList>(`${BASE}/jobs${since ? `?since=${encodeURIComponent(since)}` : ''}`, undefined, FALLBACK),
   job: (id: string) => apiJson<KccConvertJob>(`${BASE}/jobs/${id}`, undefined, FALLBACK),
 }
 

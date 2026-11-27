@@ -4,7 +4,7 @@ import type { KccConvertJob } from '@bookorbit/types'
 import KccProgressCard from './KccProgressCard.vue'
 import { kccProgress, resetKccJobTracker, trackKccJobs } from '../lib/kcc-job-tracker'
 
-vi.mock('../lib/kcc-api', () => ({ kccApi: { jobs: vi.fn().mockResolvedValue([]) } }))
+vi.mock('../lib/kcc-api', () => ({ kccApi: { jobs: vi.fn().mockResolvedValue({ jobs: [], serverTime: '', bootId: 'b' }) } }))
 vi.mock('@/features/auth/composables/usePermissions', () => ({ usePermissions: () => ({ hasPermission: () => false }) }))
 
 function job(id: string, state: KccConvertJob['state']): KccConvertJob {
@@ -19,6 +19,7 @@ function job(id: string, state: KccConvertJob['state']): KccConvertJob {
     ignoredOptions: [],
     createdAt: '',
     finishedAt: null,
+    updatedAt: '',
   }
 }
 

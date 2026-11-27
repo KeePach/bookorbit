@@ -1,5 +1,6 @@
 import { computed, ref, watch } from 'vue'
 import type {
+  BookSelectionPayload,
   KccBatchConvertResult,
   KccConvertCheck,
   KccConvertJob,
@@ -12,8 +13,9 @@ import type {
 } from '@bookorbit/types'
 import { kccApi, kccErrorCode, kccErrorText } from '../lib/kcc-api'
 import { kccProgress, trackKccJobs } from '../lib/kcc-job-tracker'
+import type { KccConvertTarget } from './useKccConvertDialog'
 
-const MAX_BATCH_BOOKS = 500
+const MAX_BATCH_BOOKS = 3000
 const REMEMBER_KEY = 'bookorbit.fork.kcc.convert'
 
 interface Remembered {
@@ -40,7 +42,10 @@ function writeRemembered(value: Remembered): void {
 
 /** State of the Convert with KCC dialog, for one book or a batch. */
 export function useKccConvert() {
-  const bookIds = ref<number[]>([])
+  const selection = ref<BookSelectionPayload | null>(null)
+  const count = ref(0)
+  /** The one book, when the dialog is for a single book. */
+  const singleBookId = computed(() => (count.value === 1 && selection.value?.bookIds?.length === 1 ? selection.value.bookIds[0]! : null))
   const status = ref<KccStatus | null>(null)
   const check = ref<KccConvertCheck | null>(null)
   const presets = ref<KccPreset[]>([])
@@ -57,7 +62,7 @@ export function useKccConvert() {
   const customOptions = ref<KccOptionValues | null>(null)
   const force = ref(false)
 
-  const isBatch = computed(() => bookIds.value.length > 1)
+  const isBatch = computed(() => singleBookId.value === null)
   const job = computed<KccConvertJob | null>(() => (jobId.value ? (kccProgress.jobs.get(jobId.value) ?? null) : null))
   const running = computed(() => job.value?.state === 'queued' || job.value?.state === 'running')
   const selectedPreset = computed(() => presets.value.find((preset) => preset.id === presetId.value) ?? null)
@@ -87,8 +92,8 @@ export function useKccConvert() {
     (state, previous) => {
       const finished = state === 'done' || state === 'failed'
       const wasRunning = previous === 'queued' || previous === 'running'
-      if (finished && wasRunning && !isBatch.value && bookIds.value[0] !== undefined) {
-        void kccApi.check(bookIds.value[0]).then((value) => {
+      if (finished && wasRunning && singleBookId.value !== null) {
+        void kccApi.check(singleBookId.value).then((value) => {
           check.value = value
         })
       }
@@ -107,8 +112,9 @@ export function useKccConvert() {
     mode.value = preferredBlocked ? (preferred === 'replace' ? 'keep' : 'replace') : preferred
   }
 
-  async function load(ids: number[]): Promise<void> {
-    bookIds.value = ids
+  async function load(next: KccConvertTarget): Promise<void> {
+    selection.value = next.selection
+    count.value = next.count
     loading.value = true
     error.value = null
     jobId.value = null
@@ -116,7 +122,7 @@ export function useKccConvert() {
     check.value = null
     force.value = false
     customOptions.value = null
-    if (ids.length > MAX_BATCH_BOOKS) {
+    if (next.count > MAX_BATCH_BOOKS) {
       error.value = `KCC converts at most ${MAX_BATCH_BOOKS} books at a time. Select fewer.`
       loading.value = false
       return
@@ -125,8 +131,8 @@ export function useKccConvert() {
       status.value = await kccApi.status()
       presets.value = await kccApi.presets()
       schema.value = status.value.reachable ? await kccApi.options() : null
-      const [single] = ids
-      if (ids.length === 1 && single !== undefined) {
+      const single = singleBookId.value
+      if (single !== null) {
         const [checked, latest] = await Promise.all([kccApi.check(single), kccApi.latestJob(single)])
         check.value = checked
         if (latest.job) {
@@ -183,16 +189,16 @@ export function useKccConvert() {
   }
 
   async function start(): Promise<void> {
-    if (!canStart.value || bookIds.value.length === 0) return
+    if (!canStart.value || selection.value === null) return
     starting.value = true
     error.value = null
     try {
       if (isBatch.value) {
-        const result = await kccApi.convertMany({ ...request(), bookIds: bookIds.value })
+        const result = await kccApi.convertMany({ ...request(), selection: selection.value })
         trackKccJobs(result.jobs)
         batchResult.value = result
       } else {
-        const started = await kccApi.convert(bookIds.value[0]!, request())
+        const started = await kccApi.convert(singleBookId.value!, request())
         trackKccJobs([started])
         jobId.value = started.id
       }
@@ -200,8 +206,8 @@ export function useKccConvert() {
     } catch (reason) {
       error.value = kccErrorText(reason)
       const code = kccErrorCode(reason)
-      if (!isBatch.value && (code === 'KCC_ALREADY_CONVERTED' || code === 'KCC_COPY_EXISTS')) {
-        check.value = await kccApi.check(bookIds.value[0]!).catch(() => check.value)
+      if (singleBookId.value !== null && (code === 'KCC_ALREADY_CONVERTED' || code === 'KCC_COPY_EXISTS')) {
+        check.value = await kccApi.check(singleBookId.value).catch(() => check.value)
       }
     } finally {
       starting.value = false
@@ -209,7 +215,7 @@ export function useKccConvert() {
   }
 
   return {
-    bookIds,
+    count,
     isBatch,
     status,
     check,

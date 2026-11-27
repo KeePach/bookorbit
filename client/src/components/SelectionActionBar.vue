@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, useSlots, watch } from 'vue'
+import { computed, getCurrentInstance, nextTick, ref, useSlots, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   BookOpen,
@@ -317,6 +317,9 @@ function confirmEmbedAudioCover() {
 function cancelEmbedAudioCover() {
   embedConfirmOpen.value = false
 }
+
+// Fork: only pages that open the KCC dialog listen for this, so the item shows only there.
+const kccConvertHandled = Boolean(getCurrentInstance()?.vnode.props?.onKccConvert)
 
 function onKccConvert() {
   if (props.count === 0) return
@@ -651,7 +654,7 @@ watch(
                           <FolderInput :size="14" />
                           <span>{{ t('book.move.action') }}</span>
                         </DropdownMenuItem>
-                        <DropdownMenuItem data-testid="action-kcc-convert" @click="onKccConvert">
+                        <DropdownMenuItem v-if="kccConvertHandled" data-testid="action-kcc-convert" @click="onKccConvert">
                           <Wand2 :size="14" />
                           <span>Convert with KCC</span>
                         </DropdownMenuItem>

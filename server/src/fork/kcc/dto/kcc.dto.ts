@@ -1,5 +1,7 @@
-import { Transform } from 'class-transformer';
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsObject, IsOptional, IsString, Length, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsBoolean, IsIn, IsInt, IsISO8601, IsObject, IsOptional, IsString, Length, Min, ValidateNested } from 'class-validator';
+
+import { BulkSelectionDto } from '../../../common/dto/bulk-selection.dto';
 
 import type { KccConvertMode, KccOptionValues } from '@bookorbit/types';
 
@@ -32,10 +34,13 @@ export class KccConvertDto {
 }
 
 export class KccBatchConvertDto extends KccConvertDto {
-  @IsArray()
-  @ArrayMinSize(1)
-  @ArrayMaxSize(500)
-  @IsInt({ each: true })
-  @Min(1, { each: true })
-  bookIds!: number[];
+  @ValidateNested()
+  @Type(() => BulkSelectionDto)
+  selection!: BulkSelectionDto;
+}
+
+export class KccJobListQueryDto {
+  @IsOptional()
+  @IsISO8601()
+  since?: string;
 }

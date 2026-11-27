@@ -59,13 +59,10 @@ const keepHint = computed(() =>
 const replaceHint = computed(() => (isBatch.value ? "Each book's file becomes the CBZ" : "The book's file becomes the CBZ"))
 const canSaveNew = computed(() => !savingPreset.value && newPresetName.value.trim().length > 0)
 
-watch(
-  () => target.value?.bookIds,
-  (bookIds) => {
-    newPresetName.value = ''
-    if (bookIds) void convert.load(bookIds)
-  },
-)
+watch(target, (next) => {
+  newPresetName.value = ''
+  if (next) void convert.load(next)
+})
 
 function handleOpenChange(value: boolean): void {
   if (!value) close()
@@ -259,7 +256,7 @@ function handleStart(): void {
           <Button variant="ghost" size="sm" @click="close">Close</Button>
           <Button v-if="!batchResult" size="sm" :disabled="!canStart" @click="handleStart">
             <Loader2 v-if="starting" :size="14" class="animate-spin" aria-hidden="true" />
-            {{ isBatch ? `Convert ${target?.bookIds.length} books` : 'Convert' }}
+            {{ isBatch ? `Convert ${target?.count.toLocaleString()} books` : 'Convert' }}
           </Button>
         </div>
       </DialogContent>

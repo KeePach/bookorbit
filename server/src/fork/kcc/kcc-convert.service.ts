@@ -11,9 +11,11 @@ import {
   type KccConvertCheck,
   type KccConvertJob,
   type KccConvertRequest,
+  type KccJobList,
   type KccOptionValues,
 } from '@bookorbit/types';
 
+import type { BulkSelectionDto } from '../../common/dto/bulk-selection.dto';
 import { buildNameExcludeMatcher } from '../../common/fs-walk.utils';
 import type { RequestUser } from '../../common/types/request-user';
 import { computeFileHash } from '../../common/utils/file-hash.utils';
@@ -33,8 +35,7 @@ import { type KccBookFile, KccRepository } from './kcc.repository';
 /** Formats KCC reads (with bsdtar/7z in its container) and BookOrbit offers to convert. */
 export const KCC_SOURCE_FORMATS = new Set(['cbz', 'cbr', 'cb7', 'pdf']);
 const FINISHED_JOB_TTL_MS = 6 * 3600_000;
-const MAX_LISTED_JOBS = 1000;
-export const MAX_BATCH_BOOKS = 500;
+export const MAX_BATCH_BOOKS = 3000;
 const COMIC_INFO_FIELDS = new Set<BookWritePayloadKey>(CBX_BOOK_FILE_WRITE_FIELDS as readonly BookWritePayloadKey[]);
 
 interface JobRecord extends KccConvertJob {
@@ -48,6 +49,8 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 export class KccConvertService {
   private readonly logger = new Logger(KccConvertService.name);
   private readonly jobs = new Map<string, JobRecord>();
+  /** New on every start: conversions live in memory, so a restart forgets them all. */
+  private readonly bootId = randomUUID();
   private queue: Promise<void> = Promise.resolve();
   /** How often to ask the KCC container about a running job. */
   pollIntervalMs = 2000;
@@ -136,6 +139,7 @@ export class KccConvertService {
       ignoredOptions: ignored,
       createdAt: new Date().toISOString(),
       finishedAt: null,
+      updatedAt: new Date().toISOString(),
     };
     this.jobs.set(job.id, job);
     this.pruneJobs();
@@ -150,15 +154,19 @@ export class KccConvertService {
   }
 
   /**
-   * The user's conversions BookOrbit still remembers (running, and finished in the last hours), oldest
-   * first. One request is enough for the corner card to follow a whole batch.
+   * The user's conversions BookOrbit still remembers (running, and finished in the last hours),
+   * oldest first, or only those that changed after `since`, so following a big batch stays cheap.
    */
-  listJobs(user: RequestUser): KccConvertJob[] {
-    return [...this.jobs.values()]
-      .filter((job) => job.userId === user.id)
+  listJobs(user: RequestUser, since: Date | null = null): KccJobList {
+    const serverTime = new Date().toISOString();
+    // A second of overlap: a change in the same millisecond as the last list is never missed, and
+    // seeing a job twice is harmless.
+    const after = since ? new Date(since.getTime() - 1000).toISOString() : null;
+    const jobs = [...this.jobs.values()]
+      .filter((job) => job.userId === user.id && (after === null || job.updatedAt > after))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-      .slice(-MAX_LISTED_JOBS)
       .map((job) => this.toDto(job));
+    return { jobs, serverTime, bootId: this.bootId };
   }
 
   /**
@@ -166,9 +174,15 @@ export class KccConvertService {
    * (format, library settings, already converted without force) is skipped with the reason instead
    * of stopping the batch.
    */
-  async startMany(user: RequestUser, bookIds: number[], request: KccConvertRequest): Promise<KccBatchConvertResult> {
+  async startMany(user: RequestUser, selection: BulkSelectionDto, request: KccConvertRequest): Promise<KccBatchConvertResult> {
     const startedAt = Date.now();
-    const unique = [...new Set(bookIds)];
+    const unique = [...new Set(await this.bookService.resolveSelectionToIds(selection, user, 'editor'))];
+    if (unique.length > MAX_BATCH_BOOKS) {
+      throw new BadRequestException({
+        errorCode: 'KCC_BATCH_TOO_LARGE',
+        message: `At most ${MAX_BATCH_BOOKS} books at a time (${unique.length} selected)`,
+      });
+    }
     this.logger.log(
       `[fork.kcc.batch] [start] userId=${user.id} books=${unique.length} mode=${request.mode} force=${Boolean(request.force)} - batch started`,
     );
@@ -199,6 +213,7 @@ export class KccConvertService {
     const startedAt = Date.now();
     const jobDir = join(this.config.workDir, job.id);
     job.state = 'running';
+    job.updatedAt = new Date().toISOString();
     this.logger.log(`[fork.kcc.convert] [start] jobId=${job.id} bookId=${job.bookId} userId=${user.id} mode=${job.mode} - conversion started`);
     try {
       // Re-read the file: it may have been renamed or rewritten while the job waited in the queue.
@@ -234,6 +249,7 @@ export class KccConvertService {
       );
     } finally {
       job.finishedAt = new Date().toISOString();
+      job.updatedAt = job.finishedAt;
       await rm(jobDir, { recursive: true, force: true }).catch(() => undefined);
     }
   }
@@ -330,6 +346,7 @@ export class KccConvertService {
       ignoredOptions: job.ignoredOptions,
       createdAt: job.createdAt,
       finishedAt: job.finishedAt,
+      updatedAt: job.updatedAt,
     };
   }
 }

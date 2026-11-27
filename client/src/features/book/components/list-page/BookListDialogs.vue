@@ -30,8 +30,7 @@ function handleRemoveFromCollection() {
 const kccDialog = useKccConvertDialog()
 
 function handleKccConvert() {
-  const bookIds = [...props.page.selectedIds]
-  kccDialog.open({ bookIds, title: bookIds.length === 1 ? '1 book' : `${bookIds.length} books` })
+  kccDialog.openForSelection(props.page.getSelectionPayload(), props.page.selectedCount)
 }
 </script>
 

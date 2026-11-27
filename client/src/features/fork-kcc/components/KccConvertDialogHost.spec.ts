@@ -50,12 +50,15 @@ const queued: KccConvertJob = {
   ignoredOptions: [],
   createdAt: '2026-11-26T00:00:00.000Z',
   finishedAt: null,
+  updatedAt: '2026-11-26T00:00:00.000Z',
 }
 
-async function openDialog(bookIds = [4]) {
+async function openDialog(bookIds = [4], query = false) {
   const wrapper = mount(KccConvertDialogHost, { attachTo: document.body, global: { stubs: { KccOptionsForm: true } } })
   mounted.push(wrapper)
-  useKccConvertDialog().open({ bookIds, title: bookIds.length === 1 ? 'Akira' : `${bookIds.length} books` })
+  if (query) useKccConvertDialog().openForSelection({ query: { libraryId: 9 } as never }, 1987)
+  else
+    useKccConvertDialog().open({ selection: { bookIds }, count: bookIds.length, title: bookIds.length === 1 ? 'Akira' : `${bookIds.length} books` })
   await flushPromises()
   await flushPromises()
   return wrapper
@@ -80,7 +83,7 @@ describe('KccConvertDialogHost', () => {
     api.check.mockResolvedValue(check())
     api.convert.mockResolvedValue(queued)
     api.job.mockResolvedValue(queued)
-    api.jobs.mockResolvedValue([queued])
+    api.jobs.mockResolvedValue({ jobs: [queued], serverTime: '2026-11-26T00:00:01.000Z', bootId: 'b1' })
   })
 
   afterEach(() => {
@@ -145,8 +148,19 @@ describe('KccConvertDialogHost', () => {
     button('Convert 2 books').click()
     await flushPromises()
 
-    expect(api.convertMany).toHaveBeenCalledWith({ mode: 'keep', presetId: 2, bookIds: [4, 5] })
+    expect(api.convertMany).toHaveBeenCalledWith({ mode: 'keep', presetId: 2, selection: { bookIds: [4, 5] } })
     expect(dialog().textContent).toContain('1 book is queued')
     expect(dialog().textContent).toContain('A novel: EPUB is not a comic')
+  })
+
+  it('converts every book matching the library view, not only the loaded rows', async () => {
+    api.convertMany.mockResolvedValue({ jobs: [queued], skipped: [] })
+    await openDialog([], true)
+
+    expect(dialog().textContent).toContain('1,987 books')
+    button('Convert 1,987 books').click()
+    await flushPromises()
+
+    expect(api.convertMany).toHaveBeenCalledWith({ mode: 'keep', presetId: 2, selection: { query: { libraryId: 9 } } })
   })
 })

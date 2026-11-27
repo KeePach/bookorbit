@@ -25,7 +25,7 @@ describe('KccConvertService', () => {
   const repo = { findBookFile: vi.fn(), findPreset: vi.fn() };
   const client = { schema: vi.fn(), startJob: vi.fn(), getJob: vi.fn() };
   const placement = { replace: vi.fn(), keep: vi.fn() };
-  const bookService = { verifyBookAccess: vi.fn() };
+  const bookService = { verifyBookAccess: vi.fn(), resolveSelectionToIds: vi.fn((dto: { bookIds: number[] }) => Promise.resolve(dto.bookIds)) };
   const fileWriteRepo = { loadPayload: vi.fn() };
   let service: KccConvertService;
   let placedContent: { comicInfo: string | null } | null;
@@ -121,7 +121,10 @@ describe('KccConvertService', () => {
     expect(placedContent?.comicInfo).toContain('<Summary>Space opera</Summary>');
     expect(placement.replace).toHaveBeenCalledWith(file, expect.any(String), expect.stringMatching(/^[0-9a-f]{32}$/), job.id);
     expect(service.getJob(user, job.id)).toMatchObject({ title: 'Saga 1', state: 'done', outputName: 'Saga #01.cbz', error: null });
-    expect(service.listJobs(user).map((listed) => listed.state)).toEqual(['done']);
+    const listed = service.listJobs(user);
+    expect(listed.jobs.map((entry) => entry.state)).toEqual(['done']);
+    expect(service.listJobs(user, new Date(Date.parse(listed.serverTime) + 2000)).jobs).toEqual([]);
+    expect(service.listJobs(user, new Date(Date.parse(job.createdAt) - 1)).jobs).toHaveLength(1);
     expect(await readdir(workDir)).toEqual([]);
   });
 
@@ -155,11 +158,12 @@ describe('KccConvertService', () => {
     const epub = { ...file, bookId: 10, title: 'A novel', absolutePath: join(library, 'Novel.epub'), format: 'epub' };
     repo.findBookFile.mockImplementation((bookId: number) => Promise.resolve(bookId === 10 ? epub : file));
 
-    const result = await service.startMany(user, [9, 10, 9], { mode: 'keep', presetId: 1 });
+    const result = await service.startMany(user, { bookIds: [9, 10, 9] }, { mode: 'keep', presetId: 1 });
     await finish();
 
     expect(result.jobs.map((job) => job.bookId)).toEqual([9]);
     expect(result.skipped).toEqual([{ bookId: 10, title: 'A novel', reason: expect.stringMatching(/CBZ, CBR, CB7 and PDF only/) }]);
+    expect(bookService.resolveSelectionToIds).toHaveBeenCalledWith({ bookIds: [9, 10, 9] }, user, 'editor');
   });
 
   it('only offers comic formats', async () => {
@@ -173,8 +177,8 @@ describe('KccConvertService', () => {
   it('does not show another user their conversions', async () => {
     const job = await service.start(user, 9, { mode: 'keep' });
     expect(() => service.getJob({ id: 6 } as RequestUser, job.id)).toThrow('Conversion not found');
-    expect(service.listJobs({ id: 6 } as RequestUser)).toEqual([]);
-    expect(service.listJobs(user).map((listed) => listed.id)).toEqual([job.id]);
+    expect(service.listJobs({ id: 6 } as RequestUser).jobs).toEqual([]);
+    expect(service.listJobs(user).jobs.map((listed) => listed.id)).toEqual([job.id]);
     await finish();
   });
 });

@@ -17,6 +17,9 @@ interface KccProgressState {
 export const kccProgress = reactive<KccProgressState>({ jobs: new Map(), session: [], dismissed: false })
 
 let pollTimer: ReturnType<typeof setTimeout> | null = null
+/** Where the last list left off, so each round only fetches what changed. */
+let syncedAt: string | null = null
+let bootId: string | null = null
 let hideTimer: ReturnType<typeof setTimeout> | null = null
 
 export function isKccJobRunning(job: KccConvertJob | undefined): boolean {
@@ -59,19 +62,23 @@ function scheduleAutoHide(): void {
   }, AUTO_HIDE_MS)
 }
 
+function markForgotten(): void {
+  for (const id of kccProgress.session) {
+    const job = kccProgress.jobs.get(id)
+    if (job && isKccJobRunning(job)) {
+      kccProgress.jobs.set(id, { ...job, state: 'failed', error: 'BookOrbit restarted before this finished. Convert it again.' })
+    }
+  }
+}
+
 async function poll(): Promise<void> {
   pollTimer = null
   try {
-    const listed = await kccApi.jobs()
-    const known = new Set(listed.map((job) => job.id))
-    for (const job of listed) kccProgress.jobs.set(job.id, job)
-    // BookOrbit restarted: it no longer knows these, so they will never finish.
-    for (const id of kccProgress.session) {
-      const job = kccProgress.jobs.get(id)
-      if (job && !known.has(id) && isKccJobRunning(job)) {
-        kccProgress.jobs.set(id, { ...job, state: 'failed', error: 'BookOrbit restarted before this finished. Convert it again.' })
-      }
-    }
+    const list = await kccApi.jobs(syncedAt ?? undefined)
+    if (bootId !== null && list.bootId !== bootId) markForgotten()
+    bootId = list.bootId
+    syncedAt = list.serverTime
+    for (const job of list.jobs) kccProgress.jobs.set(job.id, job)
   } catch {
     // Try again on the next round; the card keeps its last state meanwhile.
   }
@@ -94,8 +101,10 @@ export function trackKccJobs(jobs: KccConvertJob[]): void {
 
 /** After a reload, picks up the conversions still running on the server. */
 export async function resumeKccJobs(): Promise<void> {
-  const listed = await kccApi.jobs()
-  trackKccJobs(listed.filter((job) => isKccJobRunning(job)))
+  const list = await kccApi.jobs()
+  bootId = list.bootId
+  syncedAt = list.serverTime
+  trackKccJobs(list.jobs.filter((job) => isKccJobRunning(job)))
 }
 
 /** Hides the card. Running conversions go on, and starting another one shows it again. */
@@ -109,6 +118,8 @@ export function dismissKccProgress(): void {
 export function resetKccJobTracker(): void {
   pollTimer = clearTimer(pollTimer)
   hideTimer = clearTimer(hideTimer)
+  syncedAt = null
+  bootId = null
   kccProgress.jobs.clear()
   kccProgress.session = []
   kccProgress.dismissed = false

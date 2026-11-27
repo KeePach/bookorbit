@@ -16,7 +16,7 @@ const visible = computed(() => {
 
 function handleClick(): void {
   emit('select')
-  open({ bookIds: [props.bookId], title: props.title })
+  open({ selection: { bookIds: [props.bookId] }, count: 1, title: props.title })
 }
 </script>
 

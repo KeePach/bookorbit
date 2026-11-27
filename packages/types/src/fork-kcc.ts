@@ -1,5 +1,7 @@
 /** Fork-only: converting comics with KCC (Kindle Comic Converter) from inside BookOrbit. */
 
+import type { BookSelectionPayload } from "./book-selection";
+
 export type KccOptionKind = "bool" | "int" | "float" | "str";
 
 /** One option exactly as KCC's own command-line parser defines it. */
@@ -76,7 +78,8 @@ export interface KccConvertRequest {
 }
 
 export interface KccBatchConvertRequest extends KccConvertRequest {
-  bookIds: number[];
+  /** The same selection the other bulk actions send: picked ids, or "all matching" a query. */
+  selection: BookSelectionPayload;
 }
 
 export interface KccBatchSkip {
@@ -106,4 +109,14 @@ export interface KccConvertJob {
   ignoredOptions: string[];
   createdAt: string;
   finishedAt: string | null;
+  /** Last change of state; `GET jobs?since=` returns jobs changed after a time. */
+  updatedAt: string;
+}
+
+export interface KccJobList {
+  jobs: KccConvertJob[];
+  /** Pass back as `since` to get only what changed. */
+  serverTime: string;
+  /** Changes when BookOrbit restarts, which forgets every conversion. */
+  bootId: string;
 }

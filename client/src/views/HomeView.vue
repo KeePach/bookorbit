@@ -27,6 +27,7 @@ import { cn } from '@/lib/utils'
 import ViewHeaderDisplayControls from '@/components/view-header/ViewHeaderDisplayControls.vue'
 import BookUploadModal from '@/features/library/components/BookUploadModal.vue'
 import SelectionActionBar from '@/components/SelectionActionBar.vue'
+import { useKccConvertDialog } from '@/features/fork-kcc/composables/useKccConvertDialog'
 import AddToCollectionSheet from '@/features/collection/components/AddToCollectionSheet.vue'
 import MoveToLibrarySheet from '@/features/book/components/MoveToLibrarySheet.vue'
 import { useMoveToLibraryTarget } from '@/features/book/composables/useMoveToLibraryTarget'
@@ -623,6 +624,12 @@ const {
   selectedCount: computed(() => (querySelection.value ? querySelection.value.total : selectedCount.value)),
 })
 
+const kccDialog = useKccConvertDialog()
+
+function handleKccConvert() {
+  kccDialog.openForSelection(getSelectionPayload(), querySelection.value ? querySelection.value.total : selectedCount.value)
+}
+
 const { onBookMissing, onBookRestored, onBookMoved, onBookTransferred } = useBookEvents()
 const TRANSFER_REFRESH_DEBOUNCE_MS = 300
 let transferRefreshTimer: ReturnType<typeof setTimeout> | null = null
@@ -1148,6 +1155,7 @@ defineOptions({ name: 'HomeView' })
       :linked-selected="selectionHasLinked"
       :other-editions="selectionOtherEditions"
       @move-to-library="openMoveForSelection"
+      @kcc-convert="handleKccConvert"
       @merge="openMergeForSelection"
       @link="openLinkForSelection"
       @edit="handleEditSelected"
