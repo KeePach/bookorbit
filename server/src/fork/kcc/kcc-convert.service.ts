@@ -21,6 +21,7 @@ import type { RequestUser } from '../../common/types/request-user';
 import { computeFileHash } from '../../common/utils/file-hash.utils';
 import { sanitizeLogValue } from '../../common/utils/log-sanitize.utils';
 import { BookService } from '../../modules/book/book.service';
+import { FileRenameService } from '../../modules/file-write/file-rename.service';
 import { FileWriteRepository } from '../../modules/file-write/file-write.repository';
 import { buildComicInfoXml } from '../../modules/file-write/formats/cbx/comic-info-builder';
 import { writeComicInfoToZip } from '../../modules/file-write/formats/cbx/cbz-zip-patcher';
@@ -61,6 +62,7 @@ export class KccConvertService {
     private readonly placement: KccFilePlacementService,
     private readonly bookService: BookService,
     private readonly fileWriteRepo: FileWriteRepository,
+    private readonly fileRename: FileRenameService,
     @Inject(kccConfig.KEY) private readonly config: ConfigType<typeof kccConfig>,
   ) {}
 
@@ -136,6 +138,7 @@ export class KccConvertService {
       state: 'queued',
       error: null,
       outputName: null,
+      warning: null,
       ignoredOptions: ignored,
       createdAt: new Date().toISOString(),
       finishedAt: null,
@@ -237,6 +240,7 @@ export class KccConvertService {
           : await this.placement.keep(user, file, converted, fileHash, job.id, force);
 
       job.outputName = basename(placed.absolutePath);
+      if (job.mode === 'replace') await this.renameLikeTheButton(user, job);
       job.state = 'done';
       this.logger.log(
         `[fork.kcc.convert] [end] jobId=${job.id} bookId=${job.bookId} mode=${job.mode} durationMs=${Date.now() - startedAt} hash=${fileHash.slice(0, 8)} - conversion finished`,
@@ -251,6 +255,22 @@ export class KccConvertService {
       job.finishedAt = new Date().toISOString();
       job.updatedAt = job.finishedAt;
       await rm(jobDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+
+  /**
+   * The same rename as "Write to File & Rename": the library's naming pattern (or the app's default),
+   * forced even where automatic renaming is off. The conversion already succeeded, so a failed or
+   * skipped rename only leaves a warning on the job.
+   */
+  private async renameLikeTheButton(user: RequestUser, job: JobRecord): Promise<void> {
+    try {
+      const result = await this.fileRename.performRename(job.bookId, user.id, true, true);
+      if (result.status === 'success' && result.newPath) job.outputName = basename(result.newPath);
+      else if (result.status === 'failed') job.warning = `Converted, but not renamed: ${result.reason ?? 'rename failed'}`;
+      else if (result.reason && result.reason !== 'path unchanged') job.warning = `Converted, but not renamed: ${result.reason}`;
+    } catch (error) {
+      job.warning = `Converted, but not renamed: ${error instanceof Error ? error.message : String(error)}`;
     }
   }
 
@@ -343,6 +363,7 @@ export class KccConvertService {
       state: job.state,
       error: job.error,
       outputName: job.outputName,
+      warning: job.warning,
       ignoredOptions: job.ignoredOptions,
       createdAt: job.createdAt,
       finishedAt: job.finishedAt,

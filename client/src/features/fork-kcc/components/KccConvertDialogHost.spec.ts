@@ -47,6 +47,7 @@ const queued: KccConvertJob = {
   state: 'queued',
   error: null,
   outputName: null,
+  warning: null,
   ignoredOptions: [],
   createdAt: '2026-11-26T00:00:00.000Z',
   finishedAt: null,

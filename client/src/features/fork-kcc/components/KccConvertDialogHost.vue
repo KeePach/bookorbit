@@ -48,7 +48,7 @@ const forceWarning = computed(() => {
 const resultText = computed(() => {
   if (job.value?.state !== 'done') return null
   return job.value.mode === 'replace'
-    ? `${job.value.outputName} replaced the original in the book's folder. Drag it to your Kobo.`
+    ? `${job.value.outputName} replaced the original and follows the library's naming pattern. Drag it to your Kobo.`
     : `${job.value.outputName} is next to the original. Drag it to your Kobo.`
 })
 const keepDisabled = computed(() => running.value || (!isBatch.value && check.value?.canKeep === false))
@@ -239,6 +239,10 @@ function handleStart(): void {
               <div v-else-if="resultText" class="flex items-start gap-2 text-sm text-foreground">
                 <CheckCircle2 :size="16" class="mt-0.5 shrink-0 text-success" aria-hidden="true" />
                 <span>{{ resultText }}</span>
+              </div>
+              <div v-if="job?.state === 'done' && job.warning" class="flex items-start gap-2 text-sm text-warning">
+                <AlertTriangle :size="16" class="mt-0.5 shrink-0" aria-hidden="true" />
+                <span>{{ job.warning }}</span>
               </div>
               <div v-else-if="job?.state === 'failed'" class="flex items-start gap-2 text-sm text-destructive">
                 <XCircle :size="16" class="mt-0.5 shrink-0" aria-hidden="true" />

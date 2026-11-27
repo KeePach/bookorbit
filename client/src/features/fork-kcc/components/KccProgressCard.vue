@@ -83,6 +83,7 @@ onMounted(() => {
           <div class="min-w-0 flex-1">
             <router-link :to="`/book/${job.bookId}`" class="block truncate text-foreground hover:underline">{{ job.title }}</router-link>
             <span v-if="job.state === 'done'" class="block truncate text-muted-foreground">{{ job.outputName }}</span>
+            <span v-if="job.state === 'done' && job.warning" class="block text-warning">{{ job.warning }}</span>
             <span v-else-if="job.state === 'failed'" class="block text-destructive">{{ job.error }}</span>
             <span v-else-if="job.state === 'queued'" class="block text-muted-foreground">Waiting</span>
           </div>

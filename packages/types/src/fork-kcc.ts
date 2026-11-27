@@ -103,8 +103,10 @@ export interface KccConvertJob {
   mode: KccConvertMode;
   state: KccJobState;
   error: string | null;
-  /** File name of the result in the book's folder. */
+  /** File name of the result in the book's folder (after the rename, for Replace). */
   outputName: string | null;
+  /** The conversion worked but something after it didn't, such as the rename. */
+  warning: string | null;
   /** Preset options KCC no longer knows; they were left out. */
   ignoredOptions: string[];
   createdAt: string;

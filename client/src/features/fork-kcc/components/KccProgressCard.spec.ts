@@ -16,6 +16,8 @@ function job(id: string, state: KccConvertJob['state']): KccConvertJob {
     state,
     error: null,
     outputName: null,
+    warning: null,
+    warning: null,
     ignoredOptions: [],
     createdAt: '',
     finishedAt: null,

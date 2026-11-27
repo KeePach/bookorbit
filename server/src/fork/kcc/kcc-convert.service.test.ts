@@ -27,6 +27,7 @@ describe('KccConvertService', () => {
   const placement = { replace: vi.fn(), keep: vi.fn() };
   const bookService = { verifyBookAccess: vi.fn(), resolveSelectionToIds: vi.fn((dto: { bookIds: number[] }) => Promise.resolve(dto.bookIds)) };
   const fileWriteRepo = { loadPayload: vi.fn() };
+  const fileRename = { performRename: vi.fn() };
   let service: KccConvertService;
   let placedContent: { comicInfo: string | null } | null;
 
@@ -72,6 +73,7 @@ describe('KccConvertService', () => {
       return 'remote-1';
     });
     client.getJob.mockResolvedValue({ state: 'done', outputs: [], log: '', exitCode: 0 });
+    fileRename.performRename.mockResolvedValue({ status: 'success', newPath: join(library, 'Saga', 'Saga 001.cbz'), durationMs: 1 });
     fileWriteRepo.loadPayload.mockResolvedValue({ title: 'Saga 1', seriesName: 'Saga', pageCount: 2, description: 'Space opera' });
     placedContent = null;
     const capture = async (_file: KccBookFile, converted: string, hash: string) => {
@@ -81,11 +83,19 @@ describe('KccConvertService', () => {
     };
     placement.replace.mockImplementation(capture);
     placement.keep.mockImplementation((_user: RequestUser, ...rest: [KccBookFile, string, string]) => capture(...rest));
-    service = new KccConvertService(repo as never, client as never, placement as never, bookService as never, fileWriteRepo as never, {
-      url: 'http://kcc:8090',
-      workDir,
-      timeoutSeconds: 60,
-    });
+    service = new KccConvertService(
+      repo as never,
+      client as never,
+      placement as never,
+      bookService as never,
+      fileWriteRepo as never,
+      fileRename as never,
+      {
+        url: 'http://kcc:8090',
+        workDir,
+        timeoutSeconds: 60,
+      },
+    );
     service.pollIntervalMs = 1;
   });
 
@@ -120,12 +130,36 @@ describe('KccConvertService', () => {
     expect(placedContent?.comicInfo).toContain('<PageCount>3</PageCount>');
     expect(placedContent?.comicInfo).toContain('<Summary>Space opera</Summary>');
     expect(placement.replace).toHaveBeenCalledWith(file, expect.any(String), expect.stringMatching(/^[0-9a-f]{32}$/), job.id);
-    expect(service.getJob(user, job.id)).toMatchObject({ title: 'Saga 1', state: 'done', outputName: 'Saga #01.cbz', error: null });
+    expect(fileRename.performRename).toHaveBeenCalledWith(9, user.id, true, true);
+    expect(service.getJob(user, job.id)).toMatchObject({ title: 'Saga 1', state: 'done', outputName: 'Saga 001.cbz', error: null, warning: null });
     const listed = service.listJobs(user);
     expect(listed.jobs.map((entry) => entry.state)).toEqual(['done']);
     expect(service.listJobs(user, new Date(Date.parse(listed.serverTime) + 2000)).jobs).toEqual([]);
     expect(service.listJobs(user, new Date(Date.parse(job.createdAt) - 1)).jobs).toHaveLength(1);
     expect(await readdir(workDir)).toEqual([]);
+  });
+
+  it('renames only on Replace, and a rename problem leaves a warning, not a failed conversion', async () => {
+    client.getJob.mockImplementation(async () => {
+      const jobDir = (await readdir(workDir))[0];
+      const [out] = await readdir(join(workDir, jobDir, 'out'));
+      return { state: 'done', outputs: [`${jobDir}/out/${out}`], log: '', exitCode: 0 };
+    });
+    fileRename.performRename.mockResolvedValueOnce({ status: 'skipped', reason: 'no pattern', durationMs: 1 });
+
+    const replaced = await service.start(user, 9, { mode: 'replace' });
+    await finish();
+    expect(service.getJob(user, replaced.id)).toMatchObject({
+      state: 'done',
+      outputName: 'Saga #01.cbz',
+      warning: 'Converted, but not renamed: no pattern',
+    });
+
+    fileRename.performRename.mockClear();
+    const kept = await service.start(user, 9, { mode: 'keep', force: true });
+    await finish();
+    expect(service.getJob(user, kept.id)).toMatchObject({ state: 'done', warning: null });
+    expect(fileRename.performRename).not.toHaveBeenCalled();
   });
 
   it('reports a KCC failure on the job', async () => {

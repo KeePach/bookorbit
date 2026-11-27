@@ -19,6 +19,8 @@ function job(id: string, state: KccConvertJob['state'], extra: Partial<KccConver
     state,
     error: null,
     outputName: null,
+    warning: null,
+    warning: null,
     ignoredOptions: [],
     createdAt: '2026-11-26T00:00:00.000Z',
     finishedAt: null,
