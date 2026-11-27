@@ -3,7 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import type { KccConvertCheck, KccConvertJob } from '@bookorbit/types'
 import KccConvertDialogHost from './KccConvertDialogHost.vue'
 import { useKccConvertDialog } from '../composables/useKccConvertDialog'
-import { resetKccJobTracker } from '../lib/kcc-job-tracker'
+import { kccProgress, resetKccJobTracker } from '../lib/kcc-job-tracker'
 
 const api = vi.hoisted(() => ({
   pages: vi.fn(),
@@ -209,5 +209,42 @@ describe('KccConvertDialogHost', () => {
     button('Pages').click()
     await flushPromises()
     expect(dialog().textContent).toContain("Choosing pages isn't supported for PDF files. The whole file is converted.")
+  })
+
+  it('after converting, offers to convert again behind the already-converted warning, with the pages tab reset', async () => {
+    api.pages.mockResolvedValue({ supported: true, reason: null, pageCount: 3, version: 'v1' })
+    api.convert.mockResolvedValue({ ...queued, state: 'running', mode: 'replace' })
+    api.check.mockResolvedValue(check({ fileName: 'Ch 2.cbz', format: 'cbz', canReplace: true, replaceBlockedReason: null }))
+    await openDialog()
+    button('Pages').click()
+    await flushPromises()
+    dialog().querySelector<HTMLButtonElement>('button[aria-label="Page 1"]')!.click()
+    await flushPromises()
+    button('Remove selected').click()
+    await flushPromises()
+    button('Options').click()
+    await flushPromises()
+    button('Convert').click()
+    await flushPromises()
+    expect(api.convert).toHaveBeenCalledWith(4, { mode: 'keep', presetId: 2, removePages: [0] })
+
+    // The tracker sees the job finish; the file is now KCC output.
+    api.check.mockResolvedValue(check({ fileName: 'Ch 2.cbz', format: 'cbz', alreadyConverted: true }))
+    api.pages.mockResolvedValue({ supported: true, reason: null, pageCount: 4, version: 'v2' })
+    kccProgress.jobs.set(queued.id, { ...queued, state: 'done', outputName: 'Ch 2.cbz' })
+    await flushPromises()
+    await flushPromises()
+
+    expect(dialog().textContent).toContain('Ch 2.cbz looks like it was already converted with KCC')
+    expect(dialog().textContent).not.toContain('removed)')
+    const convert = [...dialog().querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Convert')[0]
+    expect(convert.disabled).toBe(true)
+    dialog().querySelector<HTMLButtonElement>('[role="switch"]')!.click()
+    await flushPromises()
+    expect(convert.disabled).toBe(false)
+
+    button('Pages').click()
+    await flushPromises()
+    expect(dialog().querySelector('button[aria-label="Page 1"] img')!.getAttribute('src')).toBe('/api/v1/fork/kcc/books/4/pages/0/thumb?v=v2')
   })
 })

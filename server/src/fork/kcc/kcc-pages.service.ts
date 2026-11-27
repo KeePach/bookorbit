@@ -46,9 +46,15 @@ export class KccPagesService {
   async info(user: RequestUser, file: KccBookFile): Promise<KccPagesInfo> {
     const format = file.format?.toLowerCase() ?? '';
     if (!KCC_PAGE_FORMATS.has(format)) {
-      return { supported: false, reason: `Choosing pages isn't supported for ${format ? format.toUpperCase() : 'this'} files`, pageCount: 0 };
+      return {
+        supported: false,
+        reason: `Choosing pages isn't supported for ${format ? format.toUpperCase() : 'this'} files`,
+        pageCount: 0,
+        version: '',
+      };
     }
-    return { supported: true, reason: null, pageCount: await this.comics.getPageCount(file.fileId, user) };
+    const pageCount = await this.comics.getPageCount(file.fileId, user);
+    return { supported: true, reason: null, pageCount, version: file.fileHash ?? `${file.fileId}-${pageCount}` };
   }
 
   /** A small WebP of one page for the grid. */

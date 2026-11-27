@@ -34,8 +34,8 @@ export const kccApi = {
 }
 
 /** Small WebP of one page (0-based, comic reader order), for the Pages tab. Loads with the session cookie. */
-export function kccPageThumbUrl(bookId: number, pageIndex: number): string {
-  return `${BASE}/books/${bookId}/pages/${pageIndex}/thumb`
+export function kccPageThumbUrl(bookId: number, pageIndex: number, version = ''): string {
+  return `${BASE}/books/${bookId}/pages/${pageIndex}/thumb${version ? `?v=${encodeURIComponent(version)}` : ''}`
 }
 
 /** The fork's server messages are written for the user, so they are shown as they are. */

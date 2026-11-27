@@ -33,6 +33,7 @@ const {
   modeBlockedReason,
   canStart,
   removePages,
+  pagesVersion,
 } = convert
 
 const newPresetName = ref('')
@@ -193,6 +194,7 @@ function handleStart(): void {
               </div>
               <KccPagesPanel
                 v-if="!isBatch && pagesOpened && target"
+                :key="pagesVersion"
                 v-show="tab === 'pages'"
                 v-model:removed="removePages"
                 :book-id="target.selection.bookIds?.[0] ?? 0"
@@ -270,10 +272,7 @@ function handleStart(): void {
                   <ToggleSwitch :model-value="force" @update:model-value="handleForce" />
                   <span class="text-sm">Also convert books that already look converted, and overwrite existing _kcc copies</span>
                 </div>
-                <div
-                  v-else-if="forceWarning && !running && job?.state !== 'done'"
-                  class="flex items-start gap-3 rounded-md border border-warning/40 bg-warning/10 p-3"
-                >
+                <div v-else-if="forceWarning && !running" class="flex items-start gap-3 rounded-md border border-warning/40 bg-warning/10 p-3">
                   <AlertTriangle :size="16" class="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
                   <div class="min-w-0 flex-1 space-y-2 text-sm">
                     <p>{{ forceWarning }}</p>

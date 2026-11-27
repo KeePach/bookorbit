@@ -128,7 +128,7 @@ onMounted(async () => {
             @click="handlePageClick(page, $event)"
           >
             <img
-              :src="kccPageThumbUrl(bookId, page)"
+              :src="kccPageThumbUrl(bookId, page, info.version)"
               :alt="`Page ${page + 1}`"
               loading="lazy"
               decoding="async"

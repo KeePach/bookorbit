@@ -63,11 +63,13 @@ describe('KccPagesService', () => {
   });
 
   it('lists the reader pages of a comic and says no for a PDF', async () => {
-    await expect(service.info(user, file)).resolves.toEqual({ supported: true, reason: null, pageCount: 5 });
+    await expect(service.info(user, file)).resolves.toEqual({ supported: true, reason: null, pageCount: 5, version: '30-5' });
+    await expect(service.info(user, { ...file, fileHash: 'abc' })).resolves.toMatchObject({ version: 'abc' });
     await expect(service.info(user, { ...file, format: 'pdf' })).resolves.toEqual({
       supported: false,
       reason: "Choosing pages isn't supported for PDF files",
       pageCount: 0,
+      version: '',
     });
   });
 

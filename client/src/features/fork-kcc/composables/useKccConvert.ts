@@ -63,6 +63,8 @@ export function useKccConvert() {
   const force = ref(false)
   /** Pages to leave out (0-based, reader order); only for one book. */
   const removePages = ref<number[]>([])
+  /** Bumped after a conversion so the Pages tab reloads the book's current pages. */
+  const pagesVersion = ref(0)
 
   const isBatch = computed(() => singleBookId.value === null)
   const job = computed<KccConvertJob | null>(() => (jobId.value ? (kccProgress.jobs.get(jobId.value) ?? null) : null))
@@ -98,6 +100,13 @@ export function useKccConvert() {
         void kccApi.check(singleBookId.value).then((value) => {
           check.value = value
         })
+      }
+      // The removed pages were numbered in the file just converted; after a Replace they would
+      // point at different pages of the new one, so start the Pages tab over.
+      if (state === 'done' && wasRunning) {
+        removePages.value = []
+        pagesVersion.value += 1
+        force.value = false
       }
     },
   )
@@ -236,6 +245,7 @@ export function useKccConvert() {
     customOptions,
     force,
     removePages,
+    pagesVersion,
     running,
     selectedPreset,
     modeBlockedReason,

@@ -85,6 +85,8 @@ export interface KccPagesInfo {
   /** Why pages can't be chosen, e.g. for a PDF. */
   reason: string | null;
   pageCount: number;
+  /** Changes whenever the book's file does (e.g. after a Replace), so thumbnails aren't stale. */
+  version: string;
 }
 
 export interface KccBatchConvertRequest extends KccConvertRequest {
