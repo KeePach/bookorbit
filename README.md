@@ -287,3 +287,183 @@ Copyright (C) 2025-2026 neon and BookOrbit contributors.
 BookOrbit is licensed under the **[GNU Affero General Public License v3.0 only](LICENSE)**.
 
 BookOrbit material whose copyright holders have authorized them is also subject to the **[BookOrbit Additional Terms](ADDITIONAL_TERMS.md)** under sections 7(b), 7(c), 7(d), and 7(e) of the GNU AGPL v3. See the **[Attribution and Legal Notice](NOTICE)** for the required attribution.
+
+---
+
+<a id="keepach-fork"></a>
+
+## 🍴 About this fork (KeePach/bookorbit)
+
+This is a personal fork of [bookorbit/bookorbit](https://github.com/bookorbit/bookorbit). Everything above this section is upstream's README. Everything in this section describes what the fork adds.
+
+> [!WARNING]
+> **The changes in this fork were vibecoded.** They were written with an AI coding assistant (Claude), directed and tested by the fork's owner on one home server. They were not reviewed by the BookOrbit maintainers and are not part of any official release.
+>
+> **Everything in this fork is provided "as is", without warranty of any kind, and no support is offered or expected.** Fork features may break, change or disappear at any time, including after an upstream update. Use them at your own risk and keep backups of your database and library. Issues and requests about fork features may go unanswered, and they must not be reported to the upstream BookOrbit project.
+
+The fork does not publish Docker images or releases. To run it, build the image yourself from this repository (see [Setting up the fork](#keepach-fork-setup)). The upstream Quick Start above installs upstream BookOrbit, without any of these changes.
+
+<a id="keepach-fork-features"></a>
+
+### What the fork adds
+
+> [!IMPORTANT]
+> **The MangaBaka features need the modified MangaBaka provider** from [KeePach/bookorbit-mangabaka-modification](https://github.com/KeePach/bookorbit-mangabaka-modification) (`providers/mangabaka`), not the official one. The MangaBaka reading sync reads each book's chapter and volume from the ids that provider writes (`{id}v12`, `{id}vol3`, `{id}vol3v12`), so with another provider it has nothing to send. The licensing check matches series by those ids first and falls back to titles. Setup is in the YAML example below and in that provider's README.
+
+**Manga and series**
+
+- **Upcoming volumes.** Track the next volumes of a series from its page (date, store link, cover, note). Covers of tracked series get a colored frame and badge (out, today, soon, scheduled, no date, check due, up to date, complete). An **Upcoming** page in the sidebar and a dashboard shelf list everything you are waiting for, with a calendar feed (`.ics` link or download) and daily reminders through BookOrbit's notifications ("out today", "out soon", "time to check for a date"). The colors of every status can be changed at the bottom of the Upcoming page. Backups from the older userscript can be imported on a series page.
+- **MangaBaka licensing check.** Pick your manga libraries on the Upcoming page. BookOrbit downloads MangaBaka's database dump, marks which series have an official English release (and by which publisher), and starts tracking the licensed ones. A per-series override fixes a wrong match.
+- **MangaBaka reading sync.** Pushes the reading state of the series you choose to your own MangaBaka library, the same way BookOrbit syncs to Hardcover, but per series and without percentages:
+  - Turn on **Sync to MangaBaka** on a series page. Your MangaBaka personal access token goes in the **MangaBaka reading sync** card on the Upcoming page.
+  - The chapter and volume come from each book's MangaBaka id (`{id}v12` is chapter 12, `{id}vol3` is volume 3, `{id}vol3v12` is both), counting the books marked read.
+  - The state follows your books: reading, rereading, paused (on hold), dropped (abandoned), plan to read. It becomes **completed** only when MangaBaka lists the series as completed and you have read its last listed chapter.
+  - One way only. A chapter or volume number is never lowered on MangaBaka, and your rating, notes and lists there are never touched.
+  - It runs a few seconds after a status change (web, KOReader or Kobo), on "Sync now", and once a day.
+- **Convert comics with KCC.** "Convert with KCC" on a comic's page, or for a selection from the library page, runs [Kindle Comic Converter](https://github.com/ciromattia/kcc) in its own container. Saved option presets, a progress card, leaving out chosen pages (scanlator credits, for example), and either **Keep** (writes `Name_kcc.cbz` next to the original) or **Replace** (swaps the file, then renames it with the library's naming pattern). BookOrbit's metadata is written into the result's `ComicInfo.xml`, and a converted copy links to its book in KOReader without manual linking. Sources: CBZ, CBR, CB7 and PDF. Output: CBZ.
+
+**Metadata**
+
+- **External providers get more to work with.** BookOrbit sends the book's series name and index to external providers, and reads an optional `displayTitle` from their results. A provider can then match a file named with a romanized or native title against an English series without the match being dropped.
+- **Tags field rule.** Provider tags merge as their own field, separately from genres, with a Tags row in the manual match dialog. Auto-fill and refresh pass tags through too.
+- **Companion providers**, in [KeePach/bookorbit-mangabaka-modification](https://github.com/KeePach/bookorbit-mangabaka-modification):
+  - **MangaBaka (modified):** reads chapter and volume numbers from file names, ranges, romanized titles, and tags a series that exists both as a comic and as a novel (`Solo Leveling (Manhwa)` and `Solo Leveling (Novel)`).
+  - **BookWalker:** volumes, chapters and series from the English store at bookwalker.com.
+
+**Calibre libraries**
+
+- **Calibre custom columns fill BookOrbit custom fields.** A custom field whose key matches a Calibre column's lookup name (`collection` for `#collection`) is filled from each book's `metadata.opf`, kept up to date after scans, and usable in smart scopes. Calibre's value always wins.
+- **Calibre subtitle column.** `#subtitle` fills BookOrbit's own Subtitle field (unless the field is locked).
+
+**Kobo and KOReader**
+
+- **Fanfic and web novel updates over Wi-Fi (KOReader plugin).** After a manual Sync now, the plugin checks the libraries you choose for updated files (for example fics FanFicFare updated in Calibre) and swaps them on the device in place. A finished fic with new chapters is reopened as reading, with the percentage rescaled to the longer text, and BookOrbit is told. Copies sent over USB from Calibre are linked to their BookOrbit book automatically, by Calibre uuid or by path.
+- **Kepubify options for Kobo sync.** Custom CSS for every converted book, fullscreen reading fixes, a title page with the cover (automatic, always, never) and cover detection, under **Settings > Devices > Kobo**. The bundled kepubify is updated, and stretched SVG images in converted KEPUBs are fitted to the page.
+
+<a id="keepach-fork-setup"></a>
+
+### Setting up the fork
+
+The examples keep upstream's `docker-compose.yml` as it is and put the fork's parts in a `docker-compose.override.yml` next to it. Docker Compose reads both files automatically.
+
+**1. `.env`**: start from upstream's `.env.example` (see the Quick Start above), then change the image line so Compose tags the image it builds:
+
+```dotenv
+APP_IMAGE=bookorbit-fork:local
+```
+
+**2. `docker-compose.override.yml`**: build the app from the fork, and add the optional companion containers you want. Remove the services you don't need.
+
+```yaml
+services:
+  app:
+    # Build BookOrbit from the fork instead of pulling upstream's image.
+    build:
+      context: https://github.com/KeePach/bookorbit.git#main
+    pull_policy: build
+    environment:
+      # Convert with KCC (only with the kcc service below).
+      FORK_KCC_URL: http://kcc:8090
+      # Optional fork settings, shown with their defaults:
+      # FORK_KCC_WORK_DIR: /data/fork-kcc
+      # FORK_KCC_TIMEOUT_SECONDS: "3600"
+      # FORK_CALIBRE_COLUMNS_POLL_SECONDS: "60"        # 0 turns the Calibre column sync off
+      # FORK_CALIBRE_COLUMN_LINKS: "kobo_shelf=#category, words=-"
+      # FORK_CALIBRE_SUBTITLE_COLUMN: "#subtitle"      # "-" turns it off
+      # FORK_MANGABAKA_SYNC_SWEEP_HOURS: "24"          # 0 turns the daily MangaBaka pass off
+      # FORK_MANGABAKA_SYNC_DEBOUNCE_MS: "10000"
+    # KCC writes into the comic folders (Name_kcc.cbz with Keep, the file itself with Replace),
+    # so mount those library folders writable (no :ro).
+
+  # Kindle Comic Converter, called only by BookOrbit over the compose network.
+  kcc:
+    container_name: bookorbit-kcc
+    build:
+      context: https://github.com/KeePach/bookorbit.git#main:docker/fork-kcc
+      args:
+        KCC_TAG: v13.0.4 # change and rebuild to update KCC
+    restart: unless-stopped
+    init: true
+    user: "${PUID:-1000}:${PGID:-1000}"
+    expose:
+      - "8090"
+    volumes:
+      # The same folder BookOrbit sees as /data/fork-kcc.
+      - ./data/app/fork-kcc:/work
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+  # Modified MangaBaka metadata provider, needed by the MangaBaka features.
+  # In BookOrbit: http://mangabaka:8080
+  mangabaka:
+    container_name: bookorbit-mangabaka
+    build:
+      context: https://github.com/KeePach/bookorbit-mangabaka-modification.git#main:providers/mangabaka
+      dockerfile: Dockerfile
+    image: mangabaka-provider:local
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8081:8080"
+    environment:
+      PUBLIC_URL: http://localhost:8081 # lets BookOrbit link each MangaBaka id
+
+  # BookWalker metadata provider. In BookOrbit: http://bookwalker:8080
+  bookwalker:
+    container_name: bookorbit-bookwalker
+    build:
+      context: https://github.com/KeePach/bookorbit-mangabaka-modification.git#main:providers/bookwalker
+      dockerfile: Dockerfile
+    image: bookwalker-provider:local
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8082:8080"
+    environment:
+      PUBLIC_URL: http://localhost:8082 # lets BookOrbit link each BookWalker id
+    volumes:
+      - ./data/bookwalker:/data
+```
+
+**3. Build and start:**
+
+```bash
+docker compose up -d --build
+```
+
+Builds from a Git URL are cached. After the fork changes, rebuild without the cache:
+
+```bash
+docker compose build --no-cache app kcc mangabaka bookwalker
+docker compose up -d
+```
+
+If you build from a local clone instead, use `build: { context: /path/to/bookorbit }` for `app` and `build: /path/to/bookorbit/docker/fork-kcc` for `kcc`, check out `main` and keep the working copy clean before building, and refresh the browser with Ctrl+F5 after a rebuild.
+
+**4. Per feature, inside BookOrbit:**
+
+| Feature                   | Where to set it up                                                                                                                                                                                                                                                                                                                               |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Upcoming volumes          | On a series page, **Track upcoming volumes** (then **Add volume**). Everything gathers on **Upcoming** in the sidebar. **Copy calendar link** there gives a feed for your calendar app.                                                                                                                                                          |
+| MangaBaka licensing       | **Upcoming** page, **MangaBaka licensing** card: tick your manga libraries, **Save libraries**, **Check licensing now**.                                                                                                                                                                                                                         |
+| MangaBaka reading sync    | Create a personal access token on mangabaka.org (account settings, API and apps, Personal access tokens) and paste it in the **MangaBaka reading sync** card on the Upcoming page. Then turn on **Sync to MangaBaka** on each series page. The books need MangaBaka ids, so fetch their metadata from the **modified** MangaBaka provider first. |
+| KCC                       | **Settings > Devices > KCC** shows whether BookOrbit reaches the container and holds the presets. For **Keep**, add `*_kcc.cbz` to the library's **Skip files matching** list (**Settings > Libraries**). **Replace** is offered only where the library has both **Write to file** and **Rename files** on.                                      |
+| External providers        | **Settings > Metadata > Providers**, external providers: add `http://mangabaka:8080` and `http://bookwalker:8080`, then press **Test**.                                                                                                                                                                                                          |
+| Tags                      | **Settings > Metadata > Field Rules**: set a rule for **Tags**.                                                                                                                                                                                                                                                                                  |
+| Calibre custom columns    | Point a library at a Calibre library folder (one book per folder, with `metadata.opf`). In **Settings > Metadata > Custom Fields**, create a field whose label is the column's lookup name without `#` (`collection` for `#collection`), then rename the label freely. Overrides go in `FORK_CALIBRE_COLUMN_LINKS`.                              |
+| Fanfic updates (KOReader) | Install the plugin with **Download Plugin** in **Settings > Devices > KOReader** (the fork's plugin files are included). On the device: top menu, **Tools > BookOrbit > Fanfic updates > Libraries to keep updated**. Updates are checked after a manual **Sync now**.                                                                           |
+| Kepubify options          | **Settings > Devices > Kobo**. Changing them regenerates the cached KEPUBs.                                                                                                                                                                                                                                                                      |
+
+To check that a feature runs, the app logs use tags you can filter on, for example:
+
+```bash
+docker logs bookorbit-app 2>&1 | grep -E "mangabaka_sync|calibre_columns|ForkSchema"
+```
+
+<a id="keepach-fork-notes"></a>
+
+### Notes for keeping the fork in step with upstream
+
+- Fork code lives in its own folders where possible (`server/src/fork/`, `server/src/modules/series-release/`, `client/src/features/series-releases/`, `client/src/features/fork-kcc/`, `docker/fork-kcc/`, the `bookorbit_fork*.lua` files of the KOReader plugin), so upstream merges touch few files.
+- The fork owns no database migrations. Its tables and columns are created when the app starts, with `IF NOT EXISTS` statements, and upstream's migrations folder stays exactly as upstream ships it.
+- Upstream is only ever fetched from. Nothing from this fork is sent upstream as a pull request.
