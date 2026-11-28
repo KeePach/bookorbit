@@ -15790,7 +15790,8 @@
       "import": "Could not import the backup.",
       "duplicate": "This volume is already listed as upcoming.",
       "license": "Could not change the licensing override.",
-      "licensing": "Could not reach the licensing check."
+      "licensing": "Could not reach the licensing check.",
+      "mangabakaSync": "Could not reach the MangaBaka reading sync."
     },
     "license": {
       "licensed": "Licensed",

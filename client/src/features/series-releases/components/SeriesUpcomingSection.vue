@@ -14,6 +14,7 @@ import { parseReleaseBackup, ReleaseBackupError } from '../lib/release-backup'
 import { isCheckDue, parseLocalDay } from '../lib/release-state'
 import SeriesReleaseCard from './SeriesReleaseCard.vue'
 import SeriesReleaseDialog from './SeriesReleaseDialog.vue'
+import SeriesMangabakaSync from './SeriesMangabakaSync.vue'
 
 const props = defineProps<{ seriesId: number }>()
 
@@ -226,6 +227,8 @@ async function handleBackupChosen(event: Event) {
         />
       </div>
     </div>
+
+    <SeriesMangabakaSync :series-id="seriesId" />
 
     <p v-if="!tracking.tracking" class="mt-2 text-sm text-muted-foreground">{{ t('seriesReleases.untrackedHint') }}</p>
 

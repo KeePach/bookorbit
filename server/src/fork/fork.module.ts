@@ -13,6 +13,7 @@ import { FileUpdatesRepository } from './file-updates/file-updates.repository';
 import { FileUpdatesService } from './file-updates/file-updates.service';
 import { forkSchemaProvider } from './fork-schema';
 import { KccModule } from './kcc/kcc.module';
+import { MangabakaSyncModule } from './mangabaka-sync/mangabaka-sync.module';
 import { KoreaderForkController } from './koreader-fork.controller';
 
 /**
@@ -20,7 +21,7 @@ import { KoreaderForkController } from './koreader-fork.controller';
  * touch it; app.module.ts only registers it.
  */
 @Module({
-  imports: [CommonModule, UserModule, KoreaderModule, BookModule, UserBookStatusModule, KccModule],
+  imports: [CommonModule, UserModule, KoreaderModule, BookModule, UserBookStatusModule, KccModule, MangabakaSyncModule],
   controllers: [KoreaderForkController],
   providers: [
     forkSchemaProvider,

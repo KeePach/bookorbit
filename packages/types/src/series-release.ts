@@ -165,3 +165,55 @@ export interface SeriesLicensingOverview {
   settings: SeriesLicensingSettings;
   status: SeriesLicensingStatus;
 }
+
+/** MangaBaka library states (`state` of a library entry). */
+export type MangabakaLibraryState = "considering" | "completed" | "dropped" | "paused" | "plan_to_read" | "reading" | "rereading";
+
+/** What the last sync of a series did. */
+export type MangabakaSyncOutcome = "created" | "updated" | "unchanged" | "skipped" | "error";
+
+export interface MangabakaSyncResult {
+  outcome: MangabakaSyncOutcome;
+  /** Why it was skipped or failed, or what changed, in plain words. */
+  message: string;
+  mangabakaId: string | null;
+  /** The series' page on mangabaka.org, as MangaBaka gives it. */
+  url: string | null;
+  /** The entry as BookOrbit worked it out (before "never lower" kept MangaBaka's higher numbers). */
+  state: MangabakaLibraryState | null;
+  progressChapter: number | null;
+  progressVolume: number | null;
+  syncedAt: string;
+}
+
+export interface MangabakaSyncSeriesSummary {
+  seriesId: number;
+  seriesName: string;
+  last: MangabakaSyncResult | null;
+}
+
+export interface MangabakaSyncSettings {
+  /** True once a personal access token is saved. The token itself is never sent back. */
+  configured: boolean;
+  /** Last 4 characters of the saved token. */
+  tokenHint: string | null;
+  enabled: boolean;
+  /** A sync of every selected series is running. */
+  running: boolean;
+  series: MangabakaSyncSeriesSummary[];
+}
+
+export interface MangabakaSyncSettingsUpdate {
+  /** A new personal access token ("mb-..."); an empty string removes the saved one. */
+  apiToken?: string;
+  enabled?: boolean;
+}
+
+export interface MangabakaSyncSeriesStatus {
+  configured: boolean;
+  enabled: boolean;
+  selected: boolean;
+  /** The MangaBaka series the books point at, when one is known. */
+  mangabakaId: string | null;
+  last: MangabakaSyncResult | null;
+}

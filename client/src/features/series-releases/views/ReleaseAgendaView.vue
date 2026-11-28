@@ -21,6 +21,7 @@ import { copyToClipboard } from '@/lib/clipboard'
 import { cn } from '@/lib/utils'
 import ReleaseColorsCard from '../components/ReleaseColorsCard.vue'
 import SeriesLicensingCard from '../components/SeriesLicensingCard.vue'
+import MangabakaSyncCard from '../components/MangabakaSyncCard.vue'
 import UpcomingStatusTabs from '../components/UpcomingStatusTabs.vue'
 import UpcomingVolumeCard from '../components/UpcomingVolumeCard.vue'
 import { useReleaseColors } from '../composables/useReleaseColors'
@@ -351,6 +352,7 @@ function selectFilter(filter: UpcomingFilter) {
       </template>
 
       <SeriesLicensingCard class="mx-auto max-w-3xl" />
+      <MangabakaSyncCard class="mx-auto max-w-3xl" />
       <ReleaseColorsCard class="mx-auto max-w-3xl" />
     </main>
   </section>
