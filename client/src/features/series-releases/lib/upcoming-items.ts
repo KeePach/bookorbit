@@ -1,6 +1,5 @@
 import type { SeriesReleaseOverviewRelease, SeriesReleaseOverviewSeries } from '@bookorbit/types'
-import type { TrackedReleaseKind } from '../composables/useTrackedRelease'
-import { isCheckDue, parseLocalDay, releaseState } from './release-state'
+import { isCheckDue, parseLocalDay, releaseState, type TrackedReleaseKind } from './release-state'
 
 /** One card on the Upcoming page: an announced volume, or a series still waiting on its next one. */
 export interface UpcomingItem {
@@ -29,7 +28,7 @@ const FILTER_KINDS: Record<Exclude<UpcomingFilter, 'all'>, readonly TrackedRelea
   out: ['today', 'overdue'],
   soon: ['soon'],
   scheduled: ['scheduled'],
-  waiting: ['undated', 'check'],
+  waiting: ['undated', 'check', 'caughtUp'],
   check: ['check'],
 }
 
@@ -47,7 +46,7 @@ export function buildUpcomingItems(series: readonly SeriesReleaseOverviewSeries[
       coverBookId: entry.coverBookId ?? null,
     }
     if (entry.releases.length === 0) {
-      items.push({ ...shared, key: `series-${entry.seriesId}`, release: null, day: null, kind: checkDue ? 'check' : 'undated' })
+      items.push({ ...shared, key: `series-${entry.seriesId}`, release: null, day: null, kind: checkDue ? 'check' : 'caughtUp' })
       continue
     }
     for (const release of entry.releases) {

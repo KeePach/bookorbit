@@ -1,18 +1,20 @@
 import { computed, onMounted } from 'vue'
 import type { SeriesReleaseOverviewSeries } from '@bookorbit/types'
-import { seriesBadge } from '../lib/release-state'
+import { seriesBadge, trackedKind, type TrackedReleaseKind } from '../lib/release-state'
 import { useReleaseOverview } from './useReleaseOverview'
+import { useReleaseColors } from './useReleaseColors'
 
-/** The check reminder outranks a quiet "no date"; a real date outranks both. */
-export type TrackedReleaseKind = 'today' | 'soon' | 'overdue' | 'scheduled' | 'check' | 'undated'
+export type { TrackedReleaseKind } from '../lib/release-state'
 
 /**
  * Shared state for the cover indicators (pill badge and cover frame): among the
  * series a card belongs to, picks the tracked one with the nearest upcoming date
  * and derives the display kind from it. Plain getters keep it reactive to props.
+ * A kind hidden in the status colors shows nothing.
  */
 export function useTrackedRelease(ids: () => (number | null | undefined)[], now?: () => Date | undefined) {
   const { bySeries, ensure } = useReleaseOverview()
+  const { looks } = useReleaseColors()
 
   onMounted(() => void ensure())
 
@@ -27,8 +29,9 @@ export function useTrackedRelease(ids: () => (number | null | undefined)[], now?
   const badge = computed(() => (tracked.value ? seriesBadge(tracked.value, now?.()) : null))
 
   const kind = computed<TrackedReleaseKind | null>(() => {
-    if (!badge.value) return null
-    return badge.value.state === 'undated' && badge.value.checkDue ? 'check' : badge.value.state
+    if (!tracked.value) return null
+    const value = trackedKind(tracked.value, now?.())
+    return looks.value[value].visible ? value : null
   })
 
   return { tracked, badge, kind }

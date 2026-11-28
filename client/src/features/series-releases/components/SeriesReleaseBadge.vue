@@ -3,8 +3,10 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { CalendarClock } from '@lucide/vue'
 import { formatDate } from '@/i18n/formatters'
+import { useReleaseColors } from '../composables/useReleaseColors'
 import { useTrackedRelease } from '../composables/useTrackedRelease'
 import { daysUntil, parseLocalDay } from '../lib/release-state'
+import { chipStyle, overlayTextStyle } from '../lib/release-style'
 
 const props = withDefaults(
   defineProps<{
@@ -42,47 +44,43 @@ const label = computed(() => {
     }
     case 'check':
       return t('seriesReleases.badge.check')
+    case 'caughtUp':
+      return t('seriesReleases.badge.upToDate')
+    case 'finished':
+      return t('seriesReleases.badge.finished')
     default:
       return t('seriesReleases.badge.noDate')
   }
 })
 
-const CHIP_CLASSES: Record<string, string> = {
-  today: 'bg-success/15 text-success',
-  soon: 'bg-warning/15 text-warning',
-  overdue: 'bg-destructive/15 text-destructive',
-  scheduled: 'bg-primary/10 text-primary',
-  check: 'bg-warning/15 text-warning',
-  undated: 'bg-muted text-muted-foreground',
-}
-
+const { looks } = useReleaseColors()
+const chip = computed(() => (kind.value ? chipStyle(kind.value, looks.value[kind.value]) : null))
 /** The cover pills sit on black, so the state lives in the text color alone. */
-const OVERLAY_CLASSES: Record<string, string> = {
-  today: 'text-emerald-400',
-  soon: 'text-amber-400',
-  overdue: 'text-red-400',
-  scheduled: 'text-sky-300',
-  check: 'text-amber-400',
-  undated: 'text-neutral-300',
-}
+const overlay = computed(() => (kind.value ? overlayTextStyle(kind.value, looks.value[kind.value]) : null))
 
-const title = computed(() => (badge.value ? t('seriesReleases.badge.title', { count: badge.value.count }) : undefined))
+const title = computed(() => {
+  if (kind.value === 'finished') return t('seriesReleases.finishedNote')
+  return badge.value ? t('seriesReleases.badge.title', { count: badge.value.count }) : undefined
+})
 </script>
 
 <template>
   <span
-    v-if="kind && variant === 'overlay'"
+    v-if="overlay && variant === 'overlay'"
     class="flex items-center gap-0.5 rounded-full bg-black/60 px-1.5 py-0.5"
+    :class="overlay.class"
+    :style="overlay.style"
     :title="title"
     data-testid="series-release-badge"
   >
-    <CalendarClock :size="9" :class="OVERLAY_CLASSES[kind]" />
-    <span class="text-[9px] font-bold leading-none" :class="OVERLAY_CLASSES[kind]">{{ label }}</span>
+    <CalendarClock :size="9" />
+    <span class="text-[9px] font-bold leading-none">{{ label }}</span>
   </span>
   <span
-    v-else-if="kind"
+    v-else-if="chip"
     class="inline-flex h-[21px] shrink-0 items-center gap-1 rounded-md px-1.5 text-[11.5px] font-semibold"
-    :class="CHIP_CLASSES[kind]"
+    :class="chip.class"
+    :style="chip.style"
     :title="title"
     data-testid="series-release-badge"
   >

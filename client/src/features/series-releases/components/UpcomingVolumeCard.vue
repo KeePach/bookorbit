@@ -6,7 +6,8 @@ import { BookDashed } from '@lucide/vue'
 import { formatDate } from '@/i18n/formatters'
 import { useCoverVersions } from '@/features/book/composables/useCoverVersions'
 import { daysUntil } from '../lib/release-state'
-import { FRAME_CLASSES, OVERLAY_TEXT_CLASSES } from '../lib/release-style'
+import { useReleaseColors } from '../composables/useReleaseColors'
+import { frameStyle, overlayTextStyle } from '../lib/release-style'
 import { releaseCoverUrl, type UpcomingItem } from '../lib/upcoming-items'
 
 const props = defineProps<{
@@ -17,6 +18,10 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const { coverUrl } = useCoverVersions()
+const { looks } = useReleaseColors()
+
+const frame = computed(() => frameStyle(props.item.kind, looks.value[props.item.kind]))
+const pillColor = computed(() => overlayTextStyle(props.item.kind, looks.value[props.item.kind]))
 
 const ownCover = computed(() => releaseCoverUrl(props.item.release))
 const fallbackCover = computed(() => (props.item.coverBookId !== null ? coverUrl(props.item.coverBookId) : null))
@@ -36,6 +41,7 @@ const pill = computed(() => {
   if (kind === 'soon') return t('seriesReleases.badge.inDays', { count: daysUntil(release?.releaseDate ?? null, props.now) ?? 0 })
   if (kind === 'scheduled' && day) return formatDate(day, { month: 'short', day: 'numeric' })
   if (kind === 'check') return t('seriesReleases.badge.check')
+  if (kind === 'caughtUp') return t('seriesReleases.badge.upToDate')
   return t('seriesReleases.badge.noDate')
 })
 
@@ -84,12 +90,13 @@ const standInLabel = computed(() =>
 
       <span
         class="absolute right-1.5 top-1.5 z-10 rounded-full bg-black/65 px-1.5 py-0.5 text-[10px] font-bold leading-none"
-        :class="OVERLAY_TEXT_CLASSES[item.kind]"
+        :class="pillColor.class"
+        :style="pillColor.style"
       >
         {{ pill }}
       </span>
 
-      <div class="pointer-events-none absolute inset-0 z-20 rounded-md border-2" :class="FRAME_CLASSES[item.kind]" aria-hidden="true" />
+      <div class="pointer-events-none absolute inset-0 z-20 rounded-md border-2" :class="frame.class" :style="frame.style" aria-hidden="true" />
     </div>
 
     <p class="mt-1.5 truncate text-[13px] font-semibold text-foreground" :title="item.seriesName">{{ item.seriesName }}</p>

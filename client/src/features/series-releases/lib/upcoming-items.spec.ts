@@ -59,7 +59,7 @@ describe('buildUpcomingItems', () => {
       ['release-2', 'scheduled'],
       ['release-3', 'today'],
       ['series-5', 'check'],
-      ['series-6', 'undated'],
+      ['series-6', 'caughtUp'],
     ])
     expect(items[0]).toMatchObject({ seriesName: 'Aki Sora', licensed: true, coverBookId: 30, libraryIds: [1] })
   })

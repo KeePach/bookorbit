@@ -4,7 +4,9 @@ import { useI18n } from 'vue-i18n'
 import { CalendarClock, ExternalLink } from '@lucide/vue'
 import type { SeriesRelease } from '@bookorbit/types'
 import { formatDate } from '@/i18n/formatters'
+import { useReleaseColors } from '../composables/useReleaseColors'
 import { daysUntil, parseLocalDay, releaseState, type ReleaseState } from '../lib/release-state'
+import { isCustomColor, tint } from '../lib/release-style'
 
 const props = defineProps<{
   release: SeriesRelease
@@ -48,6 +50,20 @@ const STATE_CLASSES: Record<ReleaseState, string> = {
   overdue: 'border-destructive/40 bg-destructive/10 text-destructive',
 }
 
+const { looks } = useReleaseColors()
+
+/** A picked status color replaces the theme classes on the frame and the pill. */
+const custom = computed(() => {
+  const look = looks.value[state.value]
+  return isCustomColor(state.value, look) ? look.color : null
+})
+const frameClass = computed(() => (custom.value ? '' : STATE_CLASSES[state.value].split(' ')[0]))
+const frameStyle = computed(() => (custom.value ? { borderColor: custom.value } : {}))
+const pillClass = computed(() => (custom.value ? '' : STATE_CLASSES[state.value]))
+const pillStyle = computed(() =>
+  custom.value ? { borderColor: tint(custom.value, 40), backgroundColor: tint(custom.value, 10), color: custom.value } : {},
+)
+
 /** The link is shown only when it is plainly a web address, whatever the server stored. */
 const storeUrl = computed(() => (props.release.storeUrl && /^https?:\/\//i.test(props.release.storeUrl) ? props.release.storeUrl : null))
 const cover = computed(() => (props.release.cover && /^(https:\/\/|data:image\/)/i.test(props.release.cover) ? props.release.cover : null))
@@ -65,7 +81,8 @@ const cover = computed(() => (props.release.cover && /^(https:\/\/|data:image\/)
     >
       <div
         class="relative aspect-[2/3] w-full overflow-hidden rounded-lg border-2 border-dashed bg-muted/40"
-        :class="[STATE_CLASSES[state].split(' ')[0], editable ? 'transition-colors group-hover:bg-muted' : '']"
+        :class="[frameClass, editable ? 'transition-colors group-hover:bg-muted' : '']"
+        :style="frameStyle"
       >
         <img v-if="cover" :src="cover" alt="" loading="lazy" class="size-full object-cover opacity-90" />
         <div v-else class="flex size-full items-center justify-center text-muted-foreground">
@@ -73,7 +90,11 @@ const cover = computed(() => (props.release.cover && /^(https:\/\/|data:image\/)
         </div>
       </div>
       <p class="mt-1.5 truncate text-sm font-medium text-foreground" :title="release.volume">{{ release.volume }}</p>
-      <span class="mt-1 inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[11px] font-medium" :class="STATE_CLASSES[state]">
+      <span
+        class="mt-1 inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[11px] font-medium"
+        :class="pillClass"
+        :style="pillStyle"
+      >
         <span class="truncate">{{ statusLabel }}</span>
       </span>
     </component>

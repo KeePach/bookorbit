@@ -7,6 +7,23 @@ export const CHECK_EVERY_DAYS = 30
 
 export type ReleaseState = 'undated' | 'scheduled' | 'soon' | 'today' | 'overdue'
 
+/**
+ * What a tracked series shows: the state of its nearest volume, `check` once a missing date is due
+ * for a look, `caughtUp` while nothing is listed yet and `finished` when no more volumes are expected.
+ */
+export type TrackedReleaseKind = 'today' | 'soon' | 'overdue' | 'scheduled' | 'check' | 'undated' | 'caughtUp' | 'finished'
+
+export const TRACKED_RELEASE_KINDS: readonly TrackedReleaseKind[] = [
+  'overdue',
+  'today',
+  'soon',
+  'scheduled',
+  'undated',
+  'check',
+  'caughtUp',
+  'finished',
+]
+
 /** `YYYY-MM-DD` as the local day it names, so a release date never shifts with the time zone. */
 export function parseLocalDay(value: string): Date | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
@@ -77,4 +94,12 @@ export function seriesBadge(series: SeriesReleaseOverviewSeries, now: Date = new
     count: series.releases.length,
     checkDue,
   }
+}
+
+/** The status a tracked series wears on covers. */
+export function trackedKind(series: SeriesReleaseOverviewSeries, now: Date = new Date()): TrackedReleaseKind {
+  const badge = seriesBadge(series, now)
+  if (!badge) return 'finished'
+  if (badge.count === 0) return badge.checkDue ? 'check' : 'caughtUp'
+  return badge.state === 'undated' && badge.checkDue ? 'check' : badge.state
 }

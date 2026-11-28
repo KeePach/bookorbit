@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { CHECK_EVERY_DAYS, daysUntil, isCheckDue, parseLocalDay, releaseState, seriesBadge } from './release-state'
+import { CHECK_EVERY_DAYS, daysUntil, isCheckDue, parseLocalDay, releaseState, seriesBadge, trackedKind } from './release-state'
 
 const NOW = new Date(2026, 10, 14, 15, 30)
 
@@ -94,5 +94,26 @@ describe('seriesBadge', () => {
 
   it('shows nothing for a finished series with no volumes listed', () => {
     expect(seriesBadge({ ...series, finished: true, releases: [] }, NOW)).toBeNull()
+  })
+})
+
+describe('trackedKind', () => {
+  const series = { seriesId: 3, name: 'Aki Sora', finished: false, checkedAt: '2026-11-10', releases: [] }
+  const undated = { id: 2, volume: '7', releaseDate: null, storeUrl: null, note: null }
+
+  it('follows the nearest volume', () => {
+    expect(trackedKind({ ...series, releases: [{ ...undated, releaseDate: '2026-11-20' }] }, NOW)).toBe('soon')
+    expect(trackedKind({ ...series, releases: [undated] }, NOW)).toBe('undated')
+    expect(trackedKind({ ...series, checkedAt: '2026-01-01', releases: [undated] }, NOW)).toBe('check')
+  })
+
+  it('is up to date with nothing listed, until a check is due', () => {
+    expect(trackedKind(series, NOW)).toBe('caughtUp')
+    expect(trackedKind({ ...series, checkedAt: '2026-01-01' }, NOW)).toBe('check')
+  })
+
+  it('is finished when no more volumes are expected and none is listed', () => {
+    expect(trackedKind({ ...series, finished: true }, NOW)).toBe('finished')
+    expect(trackedKind({ ...series, finished: true, releases: [undated] }, NOW)).toBe('undated')
   })
 })

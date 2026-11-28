@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useReleaseColors } from '../composables/useReleaseColors'
 import { useTrackedRelease } from '../composables/useTrackedRelease'
-import { FRAME_CLASSES } from '../lib/release-style'
+import { frameStyle } from '../lib/release-style'
 
 const props = defineProps<{
   /** Null or undefined for a book that belongs to no series: nothing renders. */
@@ -15,15 +17,18 @@ const { kind } = useTrackedRelease(
   () => [props.seriesId, ...(props.seriesIds ?? [])],
   () => props.now,
 )
+const { looks } = useReleaseColors()
+const frame = computed(() => (kind.value ? frameStyle(kind.value, looks.value[kind.value]) : null))
 // A colored frame around the whole cover, so a tracked series stands out in the grid;
 // the pill badge next to it carries the date.
 </script>
 
 <template>
   <div
-    v-if="kind"
+    v-if="frame"
     class="absolute inset-0 z-30 pointer-events-none rounded-sm border-2"
-    :class="FRAME_CLASSES[kind]"
+    :class="frame.class"
+    :style="frame.style"
     aria-hidden="true"
     data-testid="series-release-frame"
   />

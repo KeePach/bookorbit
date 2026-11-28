@@ -15720,7 +15720,9 @@
       "out": "Out",
       "inDays": "{count}d",
       "noDate": "No date",
-      "check": "Check"
+      "check": "Check",
+      "upToDate": "Up to date",
+      "finished": "Complete"
     },
     "agenda": {
       "title": "Upcoming",
@@ -15812,6 +15814,25 @@
       "neverRan": "Never checked yet.",
       "credit": "Licensing data from MangaBaka.",
       "stale": "The licensing data is over a month old."
+    },
+    "colors": {
+      "title": "Status colors",
+      "subtitle": "Pick the color of each release status on covers, Upcoming cards and tabs. Saved in this browser.",
+      "color": "Color for {status}",
+      "dashed": "Dashed",
+      "show": "Show on covers",
+      "reset": "Reset",
+      "resetAll": "Reset all",
+      "kinds": {
+        "overdue": { "label": "Out", "hint": "The release date has passed." },
+        "today": { "label": "Out today", "hint": "Releases today." },
+        "soon": { "label": "Soon", "hint": "Releases within two weeks." },
+        "scheduled": { "label": "Scheduled", "hint": "Has a release date further out." },
+        "undated": { "label": "No date", "hint": "A volume is listed, but its date is not known yet." },
+        "check": { "label": "Check due", "hint": "No date, and nobody has looked for one in a month." },
+        "caughtUp": { "label": "Up to date", "hint": "Nothing new is listed: you have every volume announced so far." },
+        "finished": { "label": "No more volumes", "hint": "The series is marked as having no more volumes." }
+      }
     }
   },
   "series": {

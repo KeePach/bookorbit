@@ -19,12 +19,14 @@ import { formatDate } from '@/i18n/formatters'
 import { apiJson } from '@/lib/api-json'
 import { copyToClipboard } from '@/lib/clipboard'
 import { cn } from '@/lib/utils'
+import ReleaseColorsCard from '../components/ReleaseColorsCard.vue'
 import SeriesLicensingCard from '../components/SeriesLicensingCard.vue'
 import UpcomingStatusTabs from '../components/UpcomingStatusTabs.vue'
 import UpcomingVolumeCard from '../components/UpcomingVolumeCard.vue'
+import { useReleaseColors } from '../composables/useReleaseColors'
 import { useReleaseOverview } from '../composables/useReleaseOverview'
 import { daysUntil } from '../lib/release-state'
-import { CHIP_CLASSES } from '../lib/release-style'
+import { chipStyle, type SurfaceStyle } from '../lib/release-style'
 import {
   UPCOMING_SORTS,
   buildUpcomingItems,
@@ -147,7 +149,14 @@ function rowPill(item: UpcomingItem): string {
   if (item.kind === 'soon') return t('seriesReleases.badge.inDays', { count: daysUntil(item.release?.releaseDate ?? null) ?? 0 })
   if (item.kind === 'scheduled' && item.day) return formatDate(item.day, { month: 'short', day: 'numeric' })
   if (item.kind === 'check') return t('seriesReleases.badge.check')
+  if (item.kind === 'caughtUp') return t('seriesReleases.badge.upToDate')
   return t('seriesReleases.badge.noDate')
+}
+
+const { looks } = useReleaseColors()
+
+function rowChip(item: UpcomingItem): SurfaceStyle {
+  return chipStyle(item.kind, looks.value[item.kind])
 }
 
 /* ---- Calendar ---- */
@@ -330,7 +339,10 @@ function selectFilter(filter: UpcomingFilter) {
               >
                 <ExternalLink :size="14" aria-hidden="true" />
               </a>
-              <span :class="cn('inline-flex h-[21px] shrink-0 items-center rounded-md px-1.5 text-[11.5px] font-semibold', CHIP_CLASSES[item.kind])">
+              <span
+                :class="cn('inline-flex h-[21px] shrink-0 items-center rounded-md px-1.5 text-[11.5px] font-semibold', rowChip(item).class)"
+                :style="rowChip(item).style"
+              >
                 {{ rowPill(item) }}
               </span>
             </li>
@@ -339,6 +351,7 @@ function selectFilter(filter: UpcomingFilter) {
       </template>
 
       <SeriesLicensingCard class="mx-auto max-w-3xl" />
+      <ReleaseColorsCard class="mx-auto max-w-3xl" />
     </main>
   </section>
 </template>

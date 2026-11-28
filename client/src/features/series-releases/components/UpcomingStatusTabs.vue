@@ -4,6 +4,9 @@ import { useI18n } from 'vue-i18n'
 import { formatNumber } from '@/i18n/formatters'
 import { segmentItem, segmentTrack } from '@/components/browse-header/browse-header'
 import { cn } from '@/lib/utils'
+import { useReleaseColors } from '../composables/useReleaseColors'
+import type { TrackedReleaseKind } from '../lib/release-state'
+import { dotStyle } from '../lib/release-style'
 import type { UpcomingFilter } from '../lib/upcoming-items'
 
 /** Built like Series' status tabs; each dot wears the color of the cover frames it selects. */
@@ -17,18 +20,24 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const { looks } = useReleaseColors()
 
 const tabs = computed(() =>
   (
     [
-      { value: 'all', dot: null },
-      { value: 'out', dot: 'bg-red-500' },
-      { value: 'soon', dot: 'bg-amber-400' },
-      { value: 'scheduled', dot: 'bg-sky-400' },
-      { value: 'waiting', dot: 'border border-dashed border-neutral-400' },
-      { value: 'check', dot: 'border border-dashed border-amber-400' },
-    ] as const
-  ).map((tab) => ({ ...tab, label: t(`seriesReleases.upcoming.filters.${tab.value}`), count: props.counts[tab.value] })),
+      { value: 'all', kind: null },
+      { value: 'out', kind: 'overdue' },
+      { value: 'soon', kind: 'soon' },
+      { value: 'scheduled', kind: 'scheduled' },
+      { value: 'waiting', kind: 'undated' },
+      { value: 'check', kind: 'check' },
+    ] as const satisfies readonly { value: UpcomingFilter; kind: TrackedReleaseKind | null }[]
+  ).map((tab) => ({
+    value: tab.value,
+    dot: tab.kind ? dotStyle(looks.value[tab.kind]) : null,
+    label: t(`seriesReleases.upcoming.filters.${tab.value}`),
+    count: props.counts[tab.value],
+  })),
 )
 </script>
 
@@ -43,7 +52,7 @@ const tabs = computed(() =>
       :aria-selected="props.filter === tab.value"
       @click="emit('select', tab.value)"
     >
-      <span v-if="tab.dot" class="size-2 shrink-0 rounded-full" :class="tab.dot" aria-hidden="true" />
+      <span v-if="tab.dot" class="size-2 shrink-0 rounded-full" :style="tab.dot" aria-hidden="true" />
       {{ tab.label }}
       <span class="text-[11.5px] tabular-nums" :class="props.filter === tab.value ? 'text-primary' : 'text-muted-foreground'">{{
         formatNumber(tab.count)
