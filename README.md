@@ -461,9 +461,3 @@ docker logs bookorbit-app 2>&1 | grep -E "mangabaka_sync|calibre_columns|ForkSch
 ```
 
 <a id="keepach-fork-notes"></a>
-
-### Notes for keeping the fork in step with upstream
-
-- Fork code lives in its own folders where possible (`server/src/fork/`, `server/src/modules/series-release/`, `client/src/features/series-releases/`, `client/src/features/fork-kcc/`, `docker/fork-kcc/`, the `bookorbit_fork*.lua` files of the KOReader plugin), so upstream merges touch few files.
-- The fork owns no database migrations. Its tables and columns are created when the app starts, with `IF NOT EXISTS` statements, and upstream's migrations folder stays exactly as upstream ships it.
-- Upstream is only ever fetched from. Nothing from this fork is sent upstream as a pull request.
